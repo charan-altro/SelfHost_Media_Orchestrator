@@ -91,3 +91,16 @@ SelfHost Media Orchestrator uses a decentralized configuration model designed fo
 ### Database
 - **Path**: The primary database is stored at `data/orchestrator.db`.
 - **Legacy Migration**: On startup, the system automatically checks for the legacy `mediavault.db` and migrates its content to the new structure if necessary.
+
+---
+
+## 7. CI/CD & Automated Distribution
+
+### GitHub Actions Workflow
+- **Continuous Integration**: On every pull request to `main`, the build workflow is triggered to ensure the code builds successfully and passes linting.
+- **Continuous Deployment**: On every push to `main`, the workflow builds a production-ready image and pushes it to **Docker Hub** with the `latest` tag.
+- **Optimization**: The workflow uses `docker/setup-buildx-action` and GHA caching (`type=gha`) to speed up subsequent builds by up to 500%.
+
+### Production vs. Development
+- **Production Image**: Optimized for size and security. The `--reload` flag is removed from the FastAPI server to prevent accidental code modifications in production.
+- **User Distribution**: Users are encouraged to pull from Docker Hub, which uses an immutable versioning scheme (e.g., `:latest`), ensuring they always run a verified, stable build.

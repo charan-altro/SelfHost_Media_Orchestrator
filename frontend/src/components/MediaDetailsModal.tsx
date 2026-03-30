@@ -174,6 +174,7 @@ export const MediaDetailsModal = ({ isOpen, onClose, media, type }: Props) => {
         className="bg-zinc-900 w-full max-w-5xl min-h-screen md:min-h-0 md:rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] relative"
         onClick={e => e.stopPropagation()}
       >
+
         {/* Close Button */}
         <button 
           onClick={onClose}
@@ -227,8 +228,8 @@ export const MediaDetailsModal = ({ isOpen, onClose, media, type }: Props) => {
                 <div className="flex items-center gap-2">
                   <input 
                     type="number"
-                    value={editForm.runtime}
-                    onChange={e => setEditForm({...editForm, runtime: parseInt(e.target.value)})}
+                    value={editForm.runtime || ''}
+                    onChange={e => setEditForm({...editForm, runtime: parseInt(e.target.value) || 0})}
                     className="bg-zinc-800 border border-white/20 rounded px-2 py-0.5 w-20 text-white focus:outline-none"
                   />
                   <span>m</span>
@@ -270,6 +271,7 @@ export const MediaDetailsModal = ({ isOpen, onClose, media, type }: Props) => {
                     <Play className="w-6 h-6 fill-current" /> Play
                   </button>
                   {trailerUrl ? (
+
                     <a 
                       href={trailerUrl} 
                       target="_blank" 
@@ -383,6 +385,8 @@ export const MediaDetailsModal = ({ isOpen, onClose, media, type }: Props) => {
                         >
                           <Languages className="w-3 h-3" /> Get Subtitles
                         </button>
+
+
                       </div>
                     </div>
                   ))}

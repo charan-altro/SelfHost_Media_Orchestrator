@@ -53,11 +53,50 @@ Before running the application, you must configure your environment:
 3. **Universal Drive Mapping**: Inside the container, these drives are automatically mounted to `/mnt/d`, `/mnt/e`, etc. When adding a library in the UI, use these `/mnt/x` paths.
 
 ### 2. Deployment via Docker
-The easiest way to run SelfHost Media Orchestrator is using Docker Compose:
+
+#### Option A: Run from Docker Hub (Recommended)
+The fastest way to get started is by using the pre-built image:
+1. Create a `docker-compose.yml` file:
+   ```yaml
+   services:
+     orchestrator:
+       image: charankumarbs/selfhost-media-orchestrator:latest
+       ports:
+         - "8000:8000"
+       volumes:
+         - ./config:/config
+         - ./media:/media
+         - ./data:/data
+         - ${DRIVE_D_PATH}:/mnt/d
+       restart: unless-stopped
+   ```
+2. Run `docker-compose up -d`.
+
+#### Option B: Build from Source
+If you want to contribute or modify the code:
 ```bash
+git clone https://github.com/charankumarbs/SelfHost_Media_Orchestrator.git
+cd SelfHost_Media_Orchestrator
 docker-compose up --build -d
 ```
 The system will be accessible at **`http://localhost:8000`**.
+
+---
+
+## Phase 3: Open Source & CI/CD
+
+
+SelfHost Media Orchestrator is now a professional open-source project with automated distribution.
+
+### 1. GitHub Actions (CI/CD)
+The project includes a `docker-publish.yml` workflow that automatically:
+- Builds the Docker image on every push to `main`.
+- Pushes the image to **Docker Hub** (`charankumarbs/selfhost-media-orchestrator`).
+
+### 2. Security & Secrets
+To maintain security, API keys and Docker tokens are never stored in the repository. If you are forking the project, ensure you set up the following **GitHub Secrets**:
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
 
 ### 3. Adding Your First Library
 1. Navigate to the **Settings** page.

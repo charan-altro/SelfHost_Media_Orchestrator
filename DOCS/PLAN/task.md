@@ -41,3 +41,13 @@ Universal Drive Mapping & .env Configuration
 - [x] Map host drives to universal mount points (`/mnt/d`, `/mnt/e`) in `docker-compose.yml`.
 - [x] Update database location from `mediavault.db` to `data/orchestrator.db` with auto-migration.
 - [x] Document new "Universal Drive Mapping" strategy in `TECHNICAL_LOGIC.md` and `walkthrough.md`.
+
+---
+time : 31/03/2026 18:00 ist
+Open Source & Professional Distribution
+- [x] Add MIT License file.
+- [x] Update README.md with badges, GitHub URLs, and Docker Hub links.
+- [x] Optimize Dockerfile for production (remove --reload).
+- [x] Create `docker-compose.release.yml` for end-users.
+- [x] Implement GitHub Actions workflow for automated Docker Hub builds.
+- [x] Sanitize codebase of all hardcoded secrets and personal paths.

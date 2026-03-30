@@ -92,3 +92,40 @@ The system uses **SQLAlchemy 2.0** with **Alembic** migrations. Key models inclu
 - **UI Update Throttling**: Optimized the Task Manager to throttle database commits and UI updates to a maximum of once every 2 seconds, significantly reducing overhead for high-frequency operations.
 - **Metadata Repair (NFO)**: Added automatic NFO regeneration to the cleanup cycle. This retroactively fixes incomplete NFO files (e.g., missing actor data) using the rich metadata stored in the database.
 - **Safe Orphan Removal**: Enhanced the empty folder cleanup with a "Safety Filter" that preserves any folder containing files larger than 20MB or unrecognized file extensions.
+
+---
+
+## Future Roadmap & Specialized Implementations
+
+### Phase 13: Hybrid Playback & Streaming (April 2026)
+This phase introduces a "Smart Playback" strategy that detects the execution environment to provide the most efficient playback experience.
+
+- **Native Mode (Laptop)**: When running directly on Windows, the system uses `os.startfile()` to launch movies natively in the default system player (VLC/MPC-HC). 
+- **Docker/Remote Mode**: When running in a container or accessed remotely, the system serves a high-performance, seekable HTTP stream.
+- **M3U Support**: Generates dynamic playlist files to allow external players (like VLC) to "stream" video data from the Docker container.
+
+
+### Phase 14: Native Windows Packaging (Roadmap)
+
+The goal is to provide a single-file `.exe` distribution with a "Desktop App" feel.
+
+#### Technical Challenges
+> [!WARNING]
+> 1. **Dual-Engine (Python + Node.js)**: Distilling the React/Vite frontend into static assets and embedding them into the Python binary via `PyInstaller`.
+> 2. **External Binaries**: Embedding `ffprobe.exe` and `MediaInfo.dll` into the package so the scanner works out-of-the-box.
+> 3. **Data Persistence**: Redirecting the database from the app folder to `%APPDATA%\SelfHostMediaOrchestrator` to prevent data loss during temp-folder extractions.
+> 4. **Persistence**: Implementing a Windows System Tray or Service so the orchestrator runs in the background.
+
+#### The "Pro Way" Implementation
+1.  **Frontend Build**: Compile Vite into `/dist` and serve via FastAPI `StaticFiles`.
+2.  **PyInstaller Bundling**: 
+    ```bash
+    pyinstaller --onefile --windowed --add-data "frontend/dist;frontend/dist" --add-data "bin/ffprobe.exe;bin" main.py
+    ```
+3.  **UI Wrapping**: Integrate **PyWebView** to wrap the web UI in a native Windows window:
+    ```python
+    import webview
+    webview.create_window('SelfHost Media Orchestrator', 'http://127.0.0.1:8000')
+    webview.start()
+    ```
+4.  **Installer**: Use **Inno Setup** to create a professional `setup.exe` that handles installation, desktop shortcuts, and path setup.

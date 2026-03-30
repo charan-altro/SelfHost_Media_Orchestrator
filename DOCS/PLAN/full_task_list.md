@@ -96,7 +96,7 @@
 - [x] Export Module (CSV, HTML, JSON Database backup)
 
 ## Phase 10: Dockerization
-- [x] Multi-stage Dockerfile
+- [x] Multi-stage Dockerfile (Optimized for production)
 - [x] docker-compose.yml with volume mounts
 - [x] Production build pipeline (Static hosting via FastAPI)
 
@@ -105,3 +105,27 @@
 - [x] Integration tests (API endpoints)
 - [x] End-to-end browser smoke test
 - [x] Docker smoke test
+
+## Phase 12: Professional Distribution (Open Source Ready)
+- [x] MIT License integration
+- [x] Professional README with Badges and Docker Hub links
+- [x] Automated GitHub Actions (CI/CD) for Docker Hub
+- [x] Codebase sanitization (No hardcoded secrets or personal paths)
+- [x] `docker-compose.release.yml` for end-users
+- [x] Universal Drive Mapping (.env strategy)
+
+## Phase 13: Hybrid Playback & Streaming (Future)
+- [ ] Backend: Environment detection (Native Windows vs. Docker)
+- [ ] Backend: Native "One-Click" playback engine (`os.startfile`)
+- [ ] Backend: High-performance streaming engine (seekable)
+- [ ] Frontend: "Play" button integration in Movie/Episode details
+- [ ] Frontend: In-browser Video.js player integration
+- [ ] Frontend: "Open in External Player" (.m3u generation)
+
+## Phase 14: Native Windows Packaging (Future)
+- [ ] Backend: Update path management for `%APPDATA%` persistence
+- [ ] Backend: Bundle `ffmpeg`/`ffprobe` binaries for portable use
+- [ ] Frontend: Build static React assets for Python embedding
+- [ ] Packaging: PyInstaller configuration for single `.exe` distribution
+- [ ] UI: PyWebView integration for native window "Desktop App" feel
+- [ ] Installer: Inno Setup / NSIS script for professional Windows installation
