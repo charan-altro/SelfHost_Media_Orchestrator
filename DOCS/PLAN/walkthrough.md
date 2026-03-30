@@ -40,16 +40,28 @@ The entire frontend was redesigned to provide a cinematic web experience inspire
 
 ## How to Run and Test
 
-### 1. Deployment via Docker
+### 1. Configuration & .env Setup
+Before running the application, you must configure your environment:
+1. Copy the `.env.example` file to a new file named `.env`.
+2. Open `.env` and configure your drive paths. For example, to map your Windows `D:` and `E:` drives:
+   ```env
+   DRIVE_D_PATH=D:\
+   DRIVE_E_PATH=E:\
+   TMDB_API_KEY=your_key_here
+   OMDB_API_KEY=your_key_here
+   ```
+3. **Universal Drive Mapping**: Inside the container, these drives are automatically mounted to `/mnt/d`, `/mnt/e`, etc. When adding a library in the UI, use these `/mnt/x` paths.
+
+### 2. Deployment via Docker
 The easiest way to run SelfHost Media Orchestrator is using Docker Compose:
 ```bash
 docker-compose up --build -d
 ```
 The system will be accessible at **`http://localhost:8000`**.
 
-### 2. Adding Your First Library
+### 3. Adding Your First Library
 1. Navigate to the **Settings** page.
-2. Click **Add Library** and provide a name and path (mapped via Docker).
+2. Click **Add Library** and provide a name and path (e.g., `/mnt/d/Movies`).
 3. The system will start a **Fast Scan** instantly.
 4. Go to the **Movies** or **TV Shows** tab to view your items.
 5. Click **Scrape** on a media card or use **Bulk Scrape** to start fetching high-quality metadata and artwork.

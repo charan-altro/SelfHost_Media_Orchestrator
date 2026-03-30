@@ -32,3 +32,12 @@ Task Management & Advanced Cleanup
 - [x] Fix missing actor data in Movie NFO generation logic.
 - [x] Implement automated NFO metadata repair (actor data) during cleanup cycle.
 - [x] Optimize Duplicate Artwork scanner with size-collision fast-filtering.
+
+---
+time : 31/03/2026 10:00 ist
+Universal Drive Mapping & .env Configuration
+- [x] Rename project to "SelfHost Media Orchestrator" across all documentation.
+- [x] Implement `.env` file for drive paths (e.g., `DRIVE_D_PATH=D:\`) and API keys.
+- [x] Map host drives to universal mount points (`/mnt/d`, `/mnt/e`) in `docker-compose.yml`.
+- [x] Update database location from `mediavault.db` to `data/orchestrator.db` with auto-migration.
+- [x] Document new "Universal Drive Mapping" strategy in `TECHNICAL_LOGIC.md` and `walkthrough.md`.

@@ -77,10 +77,17 @@ SelfHost Media Orchestrator uses **Server-Sent Events (SSE)** for non-blocking U
 
 ---
 
-## 5. Renaming & Migration Logic
-When a file is renamed, the system doesn't just move the video file.
+## 6. Configuration & Storage Mapping
+SelfHost Media Orchestrator uses a decentralized configuration model designed for Docker environments.
 
-1. **Stem Identification**: It finds all companion files sharing the same filename "stem" (`movie.nfo`, `movie-poster.jpg`, `movie.en.srt`).
-2. **Atomic Move**: It uses `shutil.move` to relocate the entire bundle to the new destination.
-3. **Database Path Migration**: It performs a bulk UPDATE in SQLite to fix all `file_path` records for the moved items, ensuring the metadata remains linked to the new file location.
-4. **Safety Check**: It only deletes the old directory if it is truly empty or only contains known "junk" files (e.g., `.DS_Store`, `Thumbs.db`).
+### .env Configuration
+- **Mechanism**: The system reads the `.env` file at startup to define drive mappings and API keys.
+- **Drive Mapping**: Environment variables like `DRIVE_D_PATH=D:\` are used by Docker Compose to mount host drives into the container.
+
+### Universal Drive Mapping
+- **Strategy**: To ensure consistency across different host OS environments, all physical drives are mapped to a standard mount point inside the container: `/mnt/d`, `/mnt/e`, etc.
+- **Benefit**: This allows the database to store portable, Linux-style paths that remain valid even if the container is moved or the host mapping changes slightly.
+
+### Database
+- **Path**: The primary database is stored at `data/orchestrator.db`.
+- **Legacy Migration**: On startup, the system automatically checks for the legacy `mediavault.db` and migrates its content to the new structure if necessary.

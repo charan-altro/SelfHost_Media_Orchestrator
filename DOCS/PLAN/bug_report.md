@@ -6,7 +6,7 @@ This document serves as the official registry of all critical bugs identified an
 
 ## 1. Library Export `NameError` (Internal Server Error)
 - **Description**: Calling the JSON library export (`GET /api/export/library/{id}/backup`) failed with a `500 Internal Server Error`.
-- **Root Cause**: In `mediavault/backend/services/exporter.py`, a nested list comprehension for extracting episodes used an incorrect loop variable reference (`c` instead of `ep`).
+- **Root Cause**: In `backend/services/exporter.py`, a nested list comprehension for extracting episodes used an incorrect loop variable reference (`c` instead of `ep`).
 - **Resolution**: Corrected the reference to `ep.__table__.columns` to ensure proper dictionary comprehension during export.
 
 ## 2. Missing Trailer Attribute for TV Shows (`AttributeError`)
@@ -27,7 +27,7 @@ This document serves as the official registry of all critical bugs identified an
 ## 5. Missing Database Column (`OperationalError`)
 - **Description**: App startup failed with `sqlite3.OperationalError: no such column: tv_shows.trailer_url`.
 - **Root Cause**: While the SQLAlchemy model was updated, the lightweight internal migration system was not triggered to add the column to existing SQLite files.
-- **Resolution**: Added `ALTER TABLE tv_shows ADD COLUMN trailer_url TEXT` to the `_MIGRATIONS` array in `mediavault/backend/core/db.py`.
+- **Resolution**: Added `ALTER TABLE tv_shows ADD COLUMN trailer_url TEXT` to the `_MIGRATIONS` array in `backend/core/db.py`.
 
 ## 6. Background Task Visibility
 - **Description**: Metadata extraction and scraper tasks were running invisibly, giving no feedback to the user on progress.

@@ -10,7 +10,7 @@ SelfHost Media Orchestrator is a full-stack, Docker-native media management appl
 The project is organized as a mono-repo for streamlined development and deployment:
 
 ```
-mediavault/
+SelfHost_Media_Orchestrator/
 ├── backend/           # FastAPI (Python 3.11+)
 │   ├── api/           # RESTful endpoints & routers
 │   ├── core/          # Configuration, DB engine, and Task Manager

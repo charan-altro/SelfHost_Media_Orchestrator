@@ -1,4 +1,4 @@
-# Media Manager – Task Checklist
+# SelfHost Media Orchestrator – Task Checklist
 
 ## Phase 0: Planning
 - [x] Review all user requirements and write implementation_plan.md
