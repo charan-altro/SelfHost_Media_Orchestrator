@@ -1,0 +1,20 @@
+services:
+  orchestrator:
+    image: charankumarbs/selfhost-media-orchestrator:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/config
+      - ./media:/media
+      - ./data:/data
+      # Universal Drive Mapping (Define these in your .env file)
+      - ${DRIVE_D_PATH:-./media/d_placeholder}:/mnt/d
+      - ${DRIVE_E_PATH:-./media/e_placeholder}:/mnt/e
+      - ${DRIVE_F_PATH:-./media/f_placeholder}:/mnt/f
+    environment:
+      - CONFIG_DIR=/config
+      - MEDIA_DIR=/media
+      - DATABASE_DIR=/data
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - OMDB_API_KEY=${OMDB_API_KEY}
+    restart: unless-stopped

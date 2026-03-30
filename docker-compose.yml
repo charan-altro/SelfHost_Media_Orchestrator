@@ -10,12 +10,9 @@ services:
       - ./media:/media
       - ./data:/data
       # Universal Drive Mapping (Define these in your .env file)
-      # Example: DRIVE_D_PATH=D:\
       - ${DRIVE_D_PATH:-./media/d_placeholder}:/mnt/d
-      - ${DRIVE_E_PATH:-./media/e_placeholder}:/mnt/e
-      - ${DRIVE_F_PATH:-./media/f_placeholder}:/mnt/f
-      # Mount the code for live-reload while developing
-      - ./backend:/app/backend
+      #- ${DRIVE_E_PATH:-./media/e_placeholder}:/mnt/e
+      #- ${DRIVE_F_PATH:-./media/f_placeholder}:/mnt/f
 
     environment:
       - CONFIG_DIR=/config
