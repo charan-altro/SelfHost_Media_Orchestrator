@@ -1,5 +1,17 @@
 import { create } from 'zustand';
-import { getMovies, getLibraries, scanLibrary, triggerScrape, deleteLibrary, bulkScrape, getTVShows, triggerTVScrape } from '../api/client';
+import { 
+  getMovies, 
+  getLibraries, 
+  scanLibrary, 
+  triggerScrape, 
+  deleteLibrary, 
+  bulkScrape, 
+  getTVShows, 
+  triggerTVScrape,
+  apiClient,
+  updateLibrary,
+  bulkScrapeTV
+} from '../api/client';
 
 export interface MovieFile {
   id: number;
@@ -166,7 +178,6 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   fetchTasks: async () => {
-    const { apiClient } = await import('../api/client');
     set({ isLoadingTasks: true });
     try {
       const res = await apiClient.get('/tasks/');
@@ -178,7 +189,6 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   clearTasks: async () => {
-    const { apiClient } = await import('../api/client');
     try {
       await apiClient.delete('/tasks/');
       set({ tasks: [] });
@@ -268,7 +278,6 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   editLibrary: async (id: number, name?: string, path?: string) => {
-    const { updateLibrary } = await import('../api/client');
     await updateLibrary(id, name, path);
     get().fetchData();
   },
@@ -322,7 +331,6 @@ export const useStore = create<AppState>((set, get) => ({
     const { selectedTVShowIds } = get();
     if (selectedTVShowIds.length === 0) return;
     
-    const { bulkScrapeTV } = await import('../api/client');
     await bulkScrapeTV(selectedTVShowIds);
     get().clearTVShowSelection();
     
@@ -336,7 +344,6 @@ export const useStore = create<AppState>((set, get) => ({
     const { selectedMovieIds, addNotification } = get();
     if (selectedMovieIds.length === 0) return;
     
-    const { apiClient } = await import('../api/client');
     await apiClient.post('/libraries/analyze/bulk', { movie_ids: selectedMovieIds });
     get().clearMovieSelection();
     addNotification(`Queued analysis for ${selectedMovieIds.length} movies.`, 'info');
@@ -346,7 +353,6 @@ export const useStore = create<AppState>((set, get) => ({
     const { selectedTVShowIds, addNotification } = get();
     if (selectedTVShowIds.length === 0) return;
     
-    const { apiClient } = await import('../api/client');
     await apiClient.post('/libraries/analyze/bulk', { show_ids: selectedTVShowIds });
     get().clearTVShowSelection();
     addNotification(`Queued analysis for ${selectedTVShowIds.length} TV shows.`, 'info');

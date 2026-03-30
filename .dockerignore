@@ -1,0 +1,32 @@
+# Docker ignore file
+# Exclude source control
+.git/
+.gitignore
+
+# Exclude documentation
+DOCS/
+README.md
+.env.example
+.env
+
+# Exclude Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.pytest_cache/
+
+# Exclude Node artifacts
+node_modules/
+dist/
+.npm/
+
+# Exclude local data and media (very important to keep build context small)
+data/
+media/
+config/
+
+# Exclude OS-specific files
+.DS_Store
+Thumbs.db

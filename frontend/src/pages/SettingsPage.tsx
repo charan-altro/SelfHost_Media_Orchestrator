@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/store';
-import { createLibrary, updateLibrary } from '../api/client';
+import { createLibrary, updateLibrary, analyzeLibrary } from '../api/client';
 import { exportLibraryCSV, exportLibraryHTML, patchSettings } from '../api/client';
 import { FolderPlus, Settings as SettingsIcon, Trash2, FolderSearch, Sparkles, Download, Key, Edit3, Database, Search } from 'lucide-react';
 import { FolderBrowserModal } from '../components/FolderBrowserModal';
@@ -33,7 +33,6 @@ export const SettingsPage = () => {
   const handleAnalyze = async (libId: number) => {
     setAnalyzingId(libId);
     try {
-      const { analyzeLibrary } = await import('../api/client');
       await analyzeLibrary(libId);
       addNotification('Deep Media Analysis queued! Checking resolution and codecs...', 'info');
     } catch (err) {
