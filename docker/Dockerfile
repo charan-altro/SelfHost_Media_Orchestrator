@@ -31,7 +31,8 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Create a non-root user for security
 RUN adduser --disabled-password --gecos "" --uid 1000 appuser && \
-    chown -R appuser:appuser /app
+    mkdir -p /app /config /data /media && \
+    chown -R appuser:appuser /app /config /data /media
 
 # Switch to non-root user
 USER appuser
