@@ -1,0 +1,31 @@
+# User configuration and data
+config/settings.json
+data/
+media/
+.env
+
+# SQLite
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+.npm/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/

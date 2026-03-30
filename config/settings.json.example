@@ -1,0 +1,12 @@
+{
+  "api_keys": {
+    "tmdb": "YOUR_TMDB_API_KEY_HERE",
+    "omdb": "YOUR_OMDB_API_KEY_HERE"
+  },
+  "libraries": [],
+  "general": {
+    "prefer_nfo": true,
+    "auto_rename": false,
+    "download_subtitles": false
+  }
+}

@@ -1,0 +1,29 @@
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/config
+      - ./media:/media
+      - ./data:/data
+      # - /path/to/your/media:/media # Uncomment and point to your media library
+      #- D:\:/d_drive # Gives Docker access to all of D:\                                                                                                                                                                        │
+      #- E:\:/e_drive # Uncomment if E:\ drive exists on this machine 
+      # Mount the code for live-reload while developing
+      - ./backend:/app/backend
+    environment:
+      - CONFIG_DIR=/config
+      - MEDIA_DIR=/media
+      - DATABASE_DIR=/data
+      # API Keys (optional if set via UI)
+      # - TMDB_API_KEY=your_key_here
+      # - OMDB_API_KEY=your_key_here
+      # - HTTP_PROXY=http://your-proxy-ip:port
+      # - HTTPS_PROXY=http://your-proxy-ip:port
+    restart: unless-stopped
+
+volumes:
+  db-data:
