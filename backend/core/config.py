@@ -16,15 +16,41 @@ class Settings(BaseSettings):
         os.makedirs(self.CONFIG_DIR, exist_ok=True)
         os.makedirs(self.MEDIA_DIR, exist_ok=True)
         os.makedirs(self.DATABASE_DIR, exist_ok=True)
-        # Check for legacy db path first if user is migrating
-        legacy_db = os.path.join(self.DATABASE_DIR, 'mediavault.db')
+        
+        legacy_db_data = os.path.join(self.DATABASE_DIR, 'mediavault.db')
+        legacy_db_config = os.path.join(self.CONFIG_DIR, 'mediavault.db')
         new_db = os.path.join(self.DATABASE_DIR, 'orchestrator.db')
         
         db_path = new_db
-        if os.path.exists(legacy_db) and not os.path.exists(new_db):
-             db_path = legacy_db
-             
-        self.DATABASE_URL = f"sqlite:///{db_path}"
+        # Priority 1: Use new db if it already exists
+        if os.path.exists(new_db):
+            db_path = new_db
+        # Priority 2: Use legacy db if it exists in data/
+        elif os.path.exists(legacy_db_data):
+            db_path = legacy_db_data
+        # Priority 3: Migration! If it exists in config/ but not in data/, move it to data/
+        elif os.path.exists(legacy_db_config):
+            import shutil
+            try:
+                print(f"[Migration] Legacy database found at {legacy_db_config}. Migrating to {new_db}...")
+                shutil.copy2(legacy_db_config, new_db)
+                print(f"[Migration] Successfully migrated database to {new_db}. Using new location.")
+                db_path = new_db
+                # Optionally rename the old one so we don't try to migrate it again if something fails
+                # os.rename(legacy_db_config, legacy_db_config + ".migrated")
+            except Exception as e:
+                print(f"[Migration] CRITICAL: Failed to migrate legacy database: {e}. Falling back to old location.")
+                db_path = legacy_db_config
+
+        # Ensure we have an absolute path for SQLAlchemy
+        abs_db_path = os.path.abspath(db_path)
+        
+        # Check for directory writability to prevent "readonly database" errors in Docker
+        db_dir = os.path.dirname(abs_db_path)
+        if not os.access(db_dir, os.W_OK):
+            print(f"WARNING: Database directory {db_dir} is NOT writable! SQLite may fail.")
+        
+        self.DATABASE_URL = f"sqlite:///{abs_db_path}"
 
     def get_api_keys(self) -> Dict[str, str]:
         # Priority 1: Environment Variables (Good for Docker)

@@ -66,9 +66,8 @@ The fastest way to get started is by using the pre-built image:
        volumes:
          - ./config:/config
          - ./media:/media
-         - ./data:/data
-         - ${DRIVE_D_PATH}:/mnt/d
-       restart: unless-stopped
+         - ./data:/data 
+       restart: unless-stopped 
    ```
 2. Run `docker-compose up -d`.
 

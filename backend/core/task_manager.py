@@ -13,24 +13,39 @@ TASK_STATUS = {"queued", "running", "done", "error"}
 
 def create_task(name: str, total: int = 100) -> str:
     """Register a new background task in the database. Returns task_id."""
-    db = SessionLocal()
-    try:
-        task_id = str(uuid.uuid4())[:8]
-        task = BackgroundTask(
-            id=task_id,
-            name=name,
-            status="queued",
-            progress=0,
-            total=total,
-            message="Queued",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
-        db.add(task)
-        db.commit()
-        return task_id
-    finally:
-        db.close()
+    import time
+    max_retries = 5
+    task_id = str(uuid.uuid4())[:8]
+
+    for attempt in range(max_retries):
+        db = SessionLocal()
+        try:
+            task = BackgroundTask(
+                id=task_id,
+                name=name,
+                status="queued",
+                progress=0,
+                total=total,
+                message="Queued",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.add(task)
+            db.commit()
+            return task_id
+        except Exception as e:
+            db.rollback()
+            err_msg = str(e).lower()
+            if ("locked" in err_msg or "readonly" in err_msg) and attempt < max_retries - 1:
+                time.sleep(0.2 * (attempt + 1))
+                continue
+            print(f"[TaskManager] Failed to create task '{name}': {e}")
+            # If it truly fails (e.g. readonly and retries exhausted), we still return the ID 
+            # so the caller doesn't necessarily crash, though updates will likely fail too.
+            return task_id 
+        finally:
+            db.close()
+    return task_id
 
 def update_task(task_id: str, status: Optional[str] = None, progress: Optional[int] = None, total: Optional[int] = None, message: str = "", db: Session = None):
     """Update task progress and status in the database with retry logic for SQLite locks."""

@@ -68,3 +68,8 @@ This document serves as the official registry of all critical bugs identified an
 - **Description**: The background cleanup task crashed with a Python error when trying to regenerate NFO files.
 - **Root Cause**: The code assumed `movie.cast` and `movie.genres` were SQLAlchemy relationship objects, but they are actually `JSON` columns that return standard Python dictionaries and lists.
 - **Resolution**: Corrected the iteration logic in `CleanupService.regenerate_nfos` to use dictionary-safe access for the cast and genre metadata fields.
+
+## 14. SQLite `OperationalError`: attempt to write a readonly database
+- **Description**: App startup failed on Windows/Docker environments with `sqlite3.OperationalError: attempt to write a readonly database`.
+- **Root Cause**: SQLite databases stored on host-mounted Windows directories (via Docker volumes) often face permission or locking issues, especially when using WAL mode. The `/config` directory was mapped to a host path that became read-only within the container's security context.
+- **Resolution**: Implemented an automatic database migration on startup. The app now detects if the database is in the legacy `/config` (host-mount) and automatically migrates it to a high-performance, writable Docker named volume (`/data/orchestrator.db`). Added `try/except` blocks around SQLite PRAGMA settings to gracefully fall back if WAL mode is unsupported by the underlying file system.

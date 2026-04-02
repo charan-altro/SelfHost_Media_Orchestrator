@@ -92,6 +92,12 @@ SelfHost Media Orchestrator uses a decentralized configuration model designed fo
 - **Path**: The primary database is stored at `data/orchestrator.db`.
 - **Legacy Migration**: On startup, the system automatically checks for the legacy `mediavault.db` and migrates its content to the new structure if necessary.
 
+### Self-Healing Database Migration (Docker/Windows Compatibility)
+To resolve the "readonly database" error often encountered on Windows host-mounts, the system employs a migration strategy:
+1. **Detection**: On initialization, the `Settings` class checks if `/config/mediavault.db` (legacy host-mount) exists but `/data/orchestrator.db` (internal writable volume) does not.
+2. **Automated Move**: It uses `shutil.copy2` to move the existing database to the `/data` directory, which is backed by a Docker named volume (`db-data`).
+3. **Lock Protection**: The database engine includes retry logic and `PRAGMA` guards to handle filesystem-level locking issues, ensuring the app stays running even on suboptimal storage configurations.
+
 ---
 
 ## 7. CI/CD & Automated Distribution
