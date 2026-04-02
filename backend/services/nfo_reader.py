@@ -57,6 +57,12 @@ class NFOReader:
                     for el in root:
                         if el.tag == 'title' and el.text: metadata['title'] = el.text
                         elif el.tag == 'sorttitle' and el.text: metadata['sort_title'] = el.text
+                        elif el.tag == 'tmdbid' and el.text: metadata['tmdb_id'] = el.text
+                        elif el.tag == 'imdbid' and el.text: metadata['imdb_id'] = el.text
+                        elif el.tag == 'uniqueid' and el.text:
+                            uid_type = el.get("type", "").lower()
+                            if uid_type == "tmdb": metadata['tmdb_id'] = el.text
+                            elif uid_type == "imdb": metadata['imdb_id'] = el.text
                         elif el.tag == 'year' and el.text:
                             try: metadata['year'] = int(el.text)
                             except: pass
@@ -111,6 +117,12 @@ class NFOReader:
                 if root.tag == 'tvshow':
                     for el in root:
                         if el.tag == 'title' and el.text: metadata['title'] = el.text
+                        elif el.tag == 'tmdbid' and el.text: metadata['tmdb_id'] = el.text
+                        elif el.tag == 'imdbid' and el.text: metadata['imdb_id'] = el.text
+                        elif el.tag == 'uniqueid' and el.text:
+                            uid_type = el.get("type", "").lower()
+                            if uid_type == "tmdb": metadata['tmdb_id'] = el.text
+                            elif uid_type == "imdb": metadata['imdb_id'] = el.text
                         elif el.tag == 'plot' and el.text: metadata['plot'] = el.text
                         elif el.tag == 'year' and el.text:
                             try: metadata['year'] = int(el.text)
