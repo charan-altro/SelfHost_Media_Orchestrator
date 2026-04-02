@@ -496,36 +496,39 @@ def _background_cleanup(library_id: int):
             from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             report_path = os.path.join(lib.path, f"cleanup_report_{timestamp}.txt")
-            with open(report_path, "w", encoding="utf-8") as f:
-                f.write(f"Cleanup Report for {lib.name} - {datetime.now().isoformat()}\n")
-                f.write("="*60 + "\n\n")
-                
-                f.write(f"SUMMARY:\n")
-                f.write(f"- Fixed Filenames: {fix_stats['fixed_filenames']}\n")
-                f.write(f"- Regenerated NFOs: {nfo_stats['regenerated_nfos']}\n")
-                f.write(f"- Removed Artwork Duplicates: {len(dupes['removed_duplicates'])}\n")
-                f.write(f"- Removed Empty Folders: {len(empty)}\n")
-                f.write(f"- Merged DB Groups: {merge_stats['merged_groups']}\n")
-                f.write(f"- Removed Orphan Records: {orphan_stats['removed_files']}\n\n")
-                
-                if fix_stats.get("details"):
-                    f.write("FIXED FILENAMES:\n")
-                    for d in fix_stats["details"]:
-                        f.write(f"  [FIXED] {d}\n")
-                    f.write("\n")
-                
-                if dupes.get("removed_duplicates"):
-                    f.write("REMOVED DUPLICATE ARTWORK:\n")
-                    for d in dupes["removed_duplicates"]:
-                        f.write(f"  [REMOVED] {d}\n")
-                    f.write("\n")
-                
-                if empty:
-                    f.write("REMOVED EMPTY FOLDERS:\n")
-                    for d in empty:
-                        f.write(f"  [REMOVED] {d}\n")
-                    f.write("\n")
-            print(f"[Cleanup] Report generated: {report_path}")
+            try:
+                with open(report_path, "w", encoding="utf-8") as f:
+                    f.write(f"Cleanup Report for {lib.name} - {datetime.now().isoformat()}\n")
+                    f.write("="*60 + "\n\n")
+                    
+                    f.write(f"SUMMARY:\n")
+                    f.write(f"- Fixed Filenames: {fix_stats['fixed_filenames']}\n")
+                    f.write(f"- Regenerated NFOs: {nfo_stats['regenerated_nfos']}\n")
+                    f.write(f"- Removed Artwork Duplicates: {len(dupes['removed_duplicates'])}\n")
+                    f.write(f"- Removed Empty Folders: {len(empty)}\n")
+                    f.write(f"- Merged DB Groups: {merge_stats['merged_groups']}\n")
+                    f.write(f"- Removed Orphan Records: {orphan_stats['removed_files']}\n\n")
+                    
+                    if fix_stats.get("details"):
+                        f.write("FIXED FILENAMES:\n")
+                        for d in fix_stats["details"]:
+                            f.write(f"  [FIXED] {d}\n")
+                        f.write("\n")
+                    
+                    if dupes.get("removed_duplicates"):
+                        f.write("REMOVED DUPLICATE ARTWORK:\n")
+                        for d in dupes["removed_duplicates"]:
+                            f.write(f"  [REMOVED] {d}\n")
+                        f.write("\n")
+                    
+                    if empty:
+                        f.write("REMOVED EMPTY FOLDERS:\n")
+                        for d in empty:
+                            f.write(f"  [REMOVED] {d}\n")
+                        f.write("\n")
+                print(f"[Cleanup] Report generated: {report_path}")
+            except PermissionError:
+                print(f"[Cleanup] Could not write report to {report_path} - Permission Denied")
         except Exception as report_err:
             print(f"[Cleanup] Failed to generate report: {report_err}")
 

@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 import os
+import stat
 
 class NFOGenerator:
     @staticmethod
@@ -9,8 +10,63 @@ class NFOGenerator:
             elem = ET.SubElement(parent, tag)
             elem.text = str(text)
 
-    def generate_movie_nfo(self, metadata: dict, file_path: str) -> str:
-        """Generates a Kodi-compatible movie.nfo."""
+    def _write_nfo_to_disk(self, nfo_path: str, xmlstr: str) -> bool:
+        """
+        Robustly writes an NFO file to disk. 
+        Attempts to handle permission issues common on host-mounted volumes.
+        Uses a temp file to ensure the original isn't lost if writing fails.
+        """
+        
+        # 1. Ensure directory exists
+        os.makedirs(os.path.dirname(nfo_path), exist_ok=True)
+        
+        temp_path = nfo_path + ".tmp"
+        
+        # 2. Write to temp file
+        try:
+            with open(temp_path, "w", encoding="utf-8") as f:
+                f.write(xmlstr)
+        except PermissionError:
+            # If we can't even write a temp file, the directory is likely read-only
+            print(f"[NFO] Permission denied in directory: {os.path.dirname(nfo_path)}")
+            return False
+        except Exception as e:
+            print(f"[NFO] Error writing temp NFO {temp_path}: {e}")
+            return False
+
+        # 3. Replace the original file
+        try:
+            if os.path.exists(nfo_path):
+                # Try to make original writable just in case it's marked read-only
+                try:
+                    os.chmod(nfo_path, stat.S_IWRITE | stat.S_IREAD)
+                except:
+                    pass
+            
+            # Use os.replace for atomic-ish replacement
+            os.replace(temp_path, nfo_path)
+            return True
+        except PermissionError:
+            # If replace fails, try the delete-and-move fallback (more aggressive)
+            try:
+                os.remove(nfo_path)
+                os.rename(temp_path, nfo_path)
+                return True
+            except Exception as e:
+                print(f"[NFO] Permission denied replacing {nfo_path}: {e}")
+                if os.path.exists(temp_path):
+                    try: os.remove(temp_path)
+                    except: pass
+                return False
+        except Exception as e:
+            print(f"[NFO] Error replacing {nfo_path}: {e}")
+            if os.path.exists(temp_path):
+                try: os.remove(temp_path)
+                except: pass
+            return False
+
+    def generate_movie_nfo(self, metadata: dict, file_path: str) -> tuple[str, bool]:
+        """Generates a Kodi-compatible movie.nfo. Returns (path, success)."""
         root = ET.Element('movie')
         
         self._create_text_element(root, 'title', metadata.get("title"))
@@ -80,13 +136,12 @@ class NFOGenerator:
         
         base_name = os.path.splitext(os.path.basename(file_path))[0]
         nfo_path = os.path.join(os.path.dirname(file_path), f"{base_name}.nfo")
-        with open(nfo_path, "w", encoding="utf-8") as f:
-            f.write(xmlstr)
+        success = self._write_nfo_to_disk(nfo_path, xmlstr)
             
-        return nfo_path
+        return nfo_path, success
 
-    def generate_tvshow_nfo(self, metadata: dict, folder_path: str) -> str:
-        """Generates a tvshow.nfo in the show folder."""
+    def generate_tvshow_nfo(self, metadata: dict, folder_path: str) -> tuple[str, bool]:
+        """Generates a tvshow.nfo in the show folder. Returns (path, success)."""
         root = ET.Element('tvshow')
         
         self._create_text_element(root, 'title', metadata.get("title"))
@@ -119,12 +174,11 @@ class NFOGenerator:
         xmlstr = '\n'.join(xmlstr.split('\n')[1:])
         
         nfo_path = os.path.join(folder_path, "tvshow.nfo")
-        with open(nfo_path, "w", encoding="utf-8") as f:
-            f.write(xmlstr)
-        return nfo_path
+        success = self._write_nfo_to_disk(nfo_path, xmlstr)
+        return nfo_path, success
 
-    def generate_episode_nfo(self, ep_metadata: dict, series_metadata: dict, file_path: str) -> str:
-        """Generates a Kodi-compatible episode.nfo."""
+    def generate_episode_nfo(self, ep_metadata: dict, series_metadata: dict, file_path: str) -> tuple[str, bool]:
+        """Generates a Kodi-compatible episode.nfo. Returns (path, success)."""
         root = ET.Element('episodedetails')
         
         self._create_text_element(root, 'title', ep_metadata.get("name"))
@@ -143,6 +197,5 @@ class NFOGenerator:
         
         base_name = os.path.splitext(os.path.basename(file_path))[0]
         nfo_path = os.path.join(os.path.dirname(file_path), f"{base_name}.nfo")
-        with open(nfo_path, "w", encoding="utf-8") as f:
-            f.write(xmlstr)
-        return nfo_path
+        success = self._write_nfo_to_disk(nfo_path, xmlstr)
+        return nfo_path, success

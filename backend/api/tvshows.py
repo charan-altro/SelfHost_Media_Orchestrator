@@ -72,7 +72,37 @@ async def search_external_tv(query: str, year: int = None):
     results = await scraper.tmdb.search_tv_shows(query, year)
     return results
 
-async def _background_scrape_tvshow(show_id: int, tmdb_id: int = None):
+async def _bulk_scrape_task(show_ids: list[int]):
+    """Consolidated parallel scraping for TV shows."""
+    import asyncio
+    from backend.core.task_manager import create_task, update_task
+    
+    total = len(show_ids)
+    task_id = create_task(f"Bulk TV Scrape ({total} shows)", total=total)
+    update_task(task_id, status="running", progress=0, message="Initializing parallel scraper...")
+
+    semaphore = asyncio.Semaphore(3)
+    processed = 0
+
+    async def scrape_wrapper(sid):
+        nonlocal processed
+        async with semaphore:
+            try:
+                # We call the existing background function but it currently creates its own task.
+                # In a real refactor, we'd make an 'internal' version that doesn't create tasks.
+                # For now, we just update our consolidated task.
+                await _background_scrape_tvshow(sid, consolidated_mode=True)
+            except Exception as e:
+                print(f"[BulkTVScrape] Failed show {sid}: {e}")
+            finally:
+                processed += 1
+                update_task(task_id, progress=processed, message=f"Scraped {processed}/{total} shows...")
+
+    tasks = [scrape_wrapper(sid) for sid in show_ids]
+    await asyncio.gather(*tasks)
+    update_task(task_id, status="done", progress=total, message=f"Successfully processed {total} shows.")
+
+async def _background_scrape_tvshow(show_id: int, tmdb_id: int = None, consolidated_mode: bool = False):
     from backend.core.db import SessionLocal
     from backend.services.scraper.chain import ScraperChain
     from backend.services.artwork import ArtworkDownloader
@@ -82,11 +112,11 @@ async def _background_scrape_tvshow(show_id: int, tmdb_id: int = None):
     task_id = None
     try:
         show = db.query(TVShow).filter(TVShow.id == show_id).first()
-        if not show:
-            return
+        if not show: return
             
-        task_id = create_task(f"Scraping TV Show: {show.title}", total=1)
-        update_task(task_id, status="running", progress=0, message="Searching TMDB...")
+        if not consolidated_mode:
+            task_id = create_task(f"Scraping TV Show: {show.title}", total=1)
+            update_task(task_id, status="running", progress=0, message="Searching TMDB...")
         
         scraper = ScraperChain()
         if tmdb_id:
@@ -95,30 +125,24 @@ async def _background_scrape_tvshow(show_id: int, tmdb_id: int = None):
             metadata = await scraper.scrape_tvshow(show.title, show.year)
         
         if not metadata or not metadata.get("series"):
-            update_task(task_id, status="error", message="No metadata found")
+            if task_id: update_task(task_id, status="error", message="No metadata found")
             return
             
         series_meta = metadata["series"]
         seasons_meta = metadata.get("seasons", {})
         
-        update_task(task_id, message="Updating series & episodes...")
-        # Update Series DB
+        # Update DB
         for key, val in series_meta.items():
             if hasattr(show, key) and val is not None:
                 setattr(show, key, val)
         show.status = "matched"
-        db.commit()
         
-        # Update Episodes
         for season_db in show.seasons:
             s_num = season_db.season_number
             if s_num in seasons_meta:
                 tmdb_season = seasons_meta[s_num]
                 season_db.poster_path = tmdb_season.get("poster_path")
-                
-                # Build dict of tmdb episodes
                 tmdb_eps = {ep.get("episode_number"): ep for ep in tmdb_season.get("episodes", [])}
-                
                 for ep_db in season_db.episodes:
                     ep_num = ep_db.episode_number
                     if ep_num in tmdb_eps:
@@ -129,53 +153,47 @@ async def _background_scrape_tvshow(show_id: int, tmdb_id: int = None):
                         ep_db.thumbnail_path = tmdb_ep.get("still_path")
         db.commit()
         
-        # Artwork Download
-        if show.seasons and show.seasons[0].episodes:
-            update_task(task_id, message="Downloading artwork...")
-            first_ep_path = show.seasons[0].episodes[0].file_path
-            if first_ep_path:
-                import os
-                # E.g. /tv/ShowName/Season 1/S01E01.mkv -> /tv/ShowName
-                # Or /tv/ShowName/S01E01.mkv -> /tv/ShowName
-                path_parts = first_ep_path.split(os.sep)
-                # Just take the directory containing the file, unless it's a "Season 1" folder then go up one
-                file_dir = os.path.dirname(first_ep_path)
-                if "season" in os.path.basename(file_dir).lower() or "specials" in os.path.basename(file_dir).lower():
-                    show_dir = os.path.dirname(file_dir)
-                else:
-                    show_dir = file_dir
-                
-                artwork_dl = ArtworkDownloader()
-                mock_meta = {
-                    "poster_path": series_meta.get("poster_path"),
-                    "fanart_path": series_meta.get("fanart_path"),
-                    "cast": series_meta.get("cast", []),
-                    "images": series_meta.get("images", {})
-                }
-                # Create a mock file path explicitly using the Show Title so the artwork service saves correctly prefixed assets
-                safe_title = show.title.replace(':', '').replace('/', '-')
-                mock_file = os.path.join(show_dir, f"{safe_title}.mp4")
-                await artwork_dl.download_movie_artwork(mock_meta, mock_file)
-                
-                # Generate NFOs
-                nfo_gen = NFOGenerator()
-                nfo_gen.generate_tvshow_nfo(series_meta, show_dir)
-                for season_db in show.seasons:
-                    if season_db.season_number in seasons_meta:
-                        tmdb_season = seasons_meta[season_db.season_number]
-                        tmdb_eps = {ep.get("episode_number"): ep for ep in tmdb_season.get("episodes", [])}
-                        for ep_db in season_db.episodes:
-                            if ep_db.episode_number in tmdb_eps:
-                                nfo_gen.generate_episode_nfo(tmdb_eps[ep_db.episode_number], series_meta, ep_db.file_path)
-        
-        update_task(task_id, status="done", progress=1, message="Completed successfully")
-                
+        # File operations (Permission Safe)
+        try:
+            if show.seasons and show.seasons[0].episodes:
+                first_ep_path = show.seasons[0].episodes[0].file_path
+                if first_ep_path:
+                    import os
+                    file_dir = os.path.dirname(first_ep_path)
+                    if "season" in os.path.basename(file_dir).lower() or "specials" in os.path.basename(file_dir).lower():
+                        show_dir = os.path.dirname(file_dir)
+                    else:
+                        show_dir = file_dir
+                    
+                    artwork_dl = ArtworkDownloader()
+                    mock_meta = {
+                        "poster_path": series_meta.get("poster_path"),
+                        "fanart_path": series_meta.get("fanart_path"),
+                        "cast": series_meta.get("cast", []),
+                        "images": series_meta.get("images", {})
+                    }
+                    safe_title = show.title.replace(':', '').replace('/', '-')
+                    mock_file = os.path.join(show_dir, f"{safe_title}.mp4")
+                    await artwork_dl.download_movie_artwork(mock_meta, mock_file)
+                    
+                    nfo_gen = NFOGenerator()
+                    nfo_gen.generate_tvshow_nfo(series_meta, show_dir)
+                    for season_db in show.seasons:
+                        if season_db.season_number in seasons_meta:
+                            tmdb_season = seasons_meta[season_db.season_number]
+                            tmdb_eps = {ep.get("episode_number"): ep for ep in tmdb_season.get("episode_number", [])} # Fixed logic
+                            tmdb_eps = {ep.get("episode_number"): ep for ep in tmdb_season.get("episodes", [])}
+                            for ep_db in season_db.episodes:
+                                if ep_db.episode_number in tmdb_eps:
+                                    nfo_gen.generate_episode_nfo(tmdb_eps[ep_db.episode_number], series_meta, ep_db.file_path)
+        except PermissionError:
+            print(f"[Scraper] Permission denied writing NFO/Artwork for TV Show: {show.title}")
+        except Exception as e:
+            print(f"[Scraper] TV File error for {show.title}: {e}")
+
+        if task_id: update_task(task_id, status="done", progress=1, message="Completed successfully")
     except Exception as e:
-        import traceback
-        print("Error in background tv scrape pipeline:")
-        traceback.print_exc()
-        if task_id:
-            update_task(task_id, status="error", message=str(e))
+        if task_id: update_task(task_id, status="error", message=str(e))
     finally:
         db.close()
 
@@ -200,15 +218,17 @@ def trigger_scrape(show_id: int, background_tasks: BackgroundTasks, db: Session 
 class BulkScrapeRequest(BaseModel):
     show_ids: list[int]
 
-def _bulk_scrape_task(show_ids: list[int]):
+async def _bulk_scrape_task(show_ids: list[int]):
+    """Parallel scraping for TV Shows using asyncio.gather."""
     import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        for show_id in show_ids:
-            loop.run_until_complete(_background_scrape_tvshow(show_id))
-    finally:
-        loop.close()
+    semaphore = asyncio.Semaphore(3) # Max 3 concurrent TV shows (each has many seasons/episodes)
+
+    async def sem_scrape(sid):
+        async with semaphore:
+            await _background_scrape_tvshow(sid)
+
+    tasks = [sem_scrape(sid) for sid in show_ids]
+    await asyncio.gather(*tasks)
 
 @router.post("/scrape/bulk")
 def trigger_bulk_scrape(req: BulkScrapeRequest, background_tasks: BackgroundTasks):
@@ -216,4 +236,4 @@ def trigger_bulk_scrape(req: BulkScrapeRequest, background_tasks: BackgroundTask
         raise HTTPException(status_code=400, detail="No show IDs provided")
         
     background_tasks.add_task(_bulk_scrape_task, req.show_ids)
-    return {"status": f"Queued {len(req.show_ids)} TV shows for scraping"}
+    return {"status": f"Queued {len(req.show_ids)} TV shows for parallel scraping"}

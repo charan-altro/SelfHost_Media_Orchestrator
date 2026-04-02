@@ -153,11 +153,12 @@ class ScannerService:
         else:
             movie = Movie(library_id=lib.id, title=clean_title, year=parsed.year, status="unmatched")
             self.db.add(movie)
+            # Flush assigns an ID without committing to disk (very fast)
             self.db.flush()
             cache[lower_title] = movie
 
-        mfile = MovieFile(movie_id=movie.id, file_path=file_path, original_filename=filename, size_bytes=size_bytes)
-        self.db.add(mfile)
+        mfile = MovieFile(file_path=file_path, original_filename=filename, size_bytes=size_bytes)
+        movie.files.append(mfile)
         return movie.id
 
     def _register_tv_sequential(self, lib: Library, file_path: str, filename: str, parsed, size_bytes: int, cache: dict):
@@ -173,18 +174,23 @@ class ScannerService:
             cache[lower_title] = show
 
         season_num = parsed.season or 1
-        season = self.db.query(Season).filter(Season.show_id == show.id, Season.season_number == season_num).first()
+        season_key = f"{show.id}_{season_num}"
+        if not hasattr(self, '_season_cache'): self._season_cache = {}
+        
+        season = self._season_cache.get(season_key)
         if not season:
-            season = Season(show_id=show.id, season_number=season_num)
-            self.db.add(season)
-            self.db.flush()
+            season = self.db.query(Season).filter(Season.show_id == show.id, Season.season_number == season_num).first()
+            if not season:
+                season = Season(season_number=season_num)
+                show.seasons.append(season)
+                self.db.flush() # Ensure season gets ID for episodes
+            self._season_cache[season_key] = season
 
         ep = Episode(
-            season_id=season.id,
             episode_number=parsed.episode or 1,
             title=f"Episode {parsed.episode or 1}",
             file_path=file_path,
             original_filename=filename
         )
-        self.db.add(ep)
+        season.episodes.append(ep)
         return show.id

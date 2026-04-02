@@ -62,5 +62,8 @@ def generate_movie_nfo(movie_id: int, db: Session = Depends(get_db)):
 
     metadata = _movie_to_metadata(movie)
     gen = NFOGenerator()
-    nfo_path = gen.generate_movie_nfo(metadata, movie.files[0].file_path)
+    nfo_path, success = gen.generate_movie_nfo(metadata, movie.files[0].file_path)
+    if not success:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="Permission denied writing NFO file. Check folder permissions.")
     return {"status": "generated", "nfo_path": nfo_path}

@@ -33,8 +33,12 @@ class ArtworkDownloader:
                 if resp.status_code == 200:
                     with open(dest_path, "wb") as f:
                         f.write(resp.content)
+            except PermissionError:
+                # Silently fail for individual images if the folder is locked
+                pass
             except Exception as e:
-                print(f"Failed to download artwork {url}: {e}")
+                # Log other network/io errors briefly
+                print(f"[Artwork] Failed {Path(dest_path).name}: {e}")
 
         import asyncio
         tasks = []
