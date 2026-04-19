@@ -20,17 +20,28 @@ router = APIRouter(prefix="/api/libraries", tags=["Libraries"])
 def _get_windows_drive_mounts() -> list[dict]:
     """
     Detect Windows drive letters mounted inside Docker.
-    Convention: D:\ is mounted at /d_drive, E:\ at /e_drive, etc.
+    Checks /mnt/d, /mnt/e (new convention) and /d_drive (legacy convention).
     Returns list of {label, path} dicts for drives that exist.
     """
     drives = []
     for letter in string.ascii_lowercase:
-        mount = f"/{letter}_drive"
-        if os.path.isdir(mount):
+        # Check new /mnt/d convention
+        mnt_path = f"/mnt/{letter}"
+        if os.path.isdir(mnt_path):
             drives.append({
                 "label": f"{letter.upper()}:\\",
-                "path": mount,
+                "path": mnt_path,
             })
+            continue # Don't add duplicate if both exist
+            
+        # Check legacy /d_drive convention
+        legacy_path = f"/{letter}_drive"
+        if os.path.isdir(legacy_path):
+            drives.append({
+                "label": f"{letter.upper()}:\\",
+                "path": legacy_path,
+            })
+            
     # Also always include /media (local mapped folder) and /
     if os.path.isdir("/media"):
         drives.append({"label": "Local /media", "path": "/media"})
