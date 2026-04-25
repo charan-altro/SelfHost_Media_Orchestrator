@@ -17,7 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Patch OS vulnerabilities and install system dependencies
 RUN apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends ffmpeg mediainfo libmediainfo0v5 && \
+    apt-get install -y --no-install-recommends ffmpeg mediainfo libmediainfo0v5 gosu passwd sed && \
     rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and setuptools to fix potential vulnerabilities in build tools
@@ -29,13 +29,14 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend/ ./backend/
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Create a non-root user for security
+# Create a non-root user for security (default UID 1000)
 RUN adduser --disabled-password --gecos "" --uid 1000 appuser && \
     mkdir -p /app /config /data /media && \
     chown -R appuser:appuser /app /config /data /media
 
-# Switch to non-root user
-USER appuser
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 EXPOSE 8000
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

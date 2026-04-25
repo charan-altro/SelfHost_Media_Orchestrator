@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Movie, TVShow, useStore, Episode } from '../store/store';
-import { X, Star, Clock, Calendar, Film, User, RefreshCw, Search, FolderInput, Play, ChevronDown, Edit2, Save, XCircle, Languages, Youtube } from 'lucide-react';
-import { renameMovie, triggerTVScrape, triggerScrape, getTVShowDetails, updateMovie, updateTVShow, getTrailerUrl, triggerTrailerFetch, downloadSubtitles } from '../api/client';
+import { X, Star, Clock, Calendar, Film, User, RefreshCw, Search, FolderInput, Play, ChevronDown, Edit2, Save, XCircle, Languages, Youtube, Download } from 'lucide-react';
+import { renameMovie, triggerTVScrape, triggerScrape, getTVShowDetails, updateMovie, updateTVShow, getTrailerUrl, triggerTrailerFetch, downloadSubtitles, getDownloadUrl } from '../api/client';
 import { FixMatchModal } from './FixMatchModal';
 
 interface Props {
@@ -270,6 +270,15 @@ export const MediaDetailsModal = ({ isOpen, onClose, media, type }: Props) => {
                   <button className="flex items-center gap-3 px-8 py-3 bg-white text-black rounded-lg font-bold hover:bg-zinc-200 transition-all shadow-xl">
                     <Play className="w-6 h-6 fill-current" /> Play
                   </button>
+                  {isMovie && (
+                    <a 
+                      href={getDownloadUrl('movie', media.id)} 
+                      download
+                      className="flex items-center gap-3 px-8 py-3 bg-zinc-100/10 text-white rounded-lg font-bold hover:bg-zinc-100/20 transition-all border border-white/20 backdrop-blur-md"
+                    >
+                      <Download className="w-6 h-6" /> Download
+                    </a>
+                  )}
                   {trailerUrl ? (
 
                     <a 
@@ -379,12 +388,21 @@ export const MediaDetailsModal = ({ isOpen, onClose, media, type }: Props) => {
                         <p className="text-sm text-zinc-400 leading-relaxed line-clamp-3 md:line-clamp-2">
                           {ep.plot || "No description available for this episode."}
                         </p>
-                        <button 
-                          onClick={() => handleDownloadSubtitles('episode', ep.id)}
-                          className="mt-3 flex items-center gap-2 text-[10px] uppercase font-black text-zinc-500 hover:text-white transition-colors"
-                        >
-                          <Languages className="w-3 h-3" /> Get Subtitles
-                        </button>
+                        <div className="flex items-center gap-4">
+                          <button 
+                            onClick={() => handleDownloadSubtitles('episode', ep.id)}
+                            className="mt-3 flex items-center gap-2 text-[10px] uppercase font-black text-zinc-500 hover:text-white transition-colors"
+                          >
+                            <Languages className="w-3 h-3" /> Get Subtitles
+                          </button>
+                          <a 
+                            href={getDownloadUrl('episode', ep.id)}
+                            download
+                            className="mt-3 flex items-center gap-2 text-[10px] uppercase font-black text-zinc-500 hover:text-white transition-colors"
+                          >
+                            <Download className="w-3 h-3" /> Download
+                          </a>
+                        </div>
 
 
                       </div>

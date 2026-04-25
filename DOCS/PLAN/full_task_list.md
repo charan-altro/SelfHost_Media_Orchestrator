@@ -80,6 +80,7 @@
 - [x] /api/settings – GET + PATCH configuration
 - [x] /api/tasks – task status/progress
 - [x] /api/export – CSV, HTML, and JSON Library Backup exports
+- [x] **High-performance Media Download** (HTTP sendfile optimization)
 - [ ] 🆕 /api/sync/trakt (⚡ optional/future)
 
 ## Phase 9: Frontend UI
@@ -90,6 +91,7 @@
 - [x] Fix-Match / Manual search dialog
 - [x] Library Path Management (Add, Delete, **Edit Path with Auto-Migration via Modal**)
 - [x] Detailed Metadata Modal (Netflix-style, Cast List, Episode Browser)
+- [x] **Download button integration** (Movie Hero + TV Episode list)
 - [x] **Manual Metadata Editing** (Edit Title, Year, Plot, Director, etc. directly in UI)
 - [x] **Non-intrusive UI Notifications** (Replaced browser alerts/prompts with Toast Overlay & Custom Modals)
 - [x] Task progress monitor (TasksPage – live polling)
