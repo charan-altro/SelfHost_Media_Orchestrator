@@ -101,7 +101,7 @@ const Layout = () => {
         <div className="flex items-center justify-between px-4 md:px-12 py-4">
           <div className="flex items-center gap-8">
             <h1 className="text-2xl md:text-3xl font-black text-red-600 tracking-tighter cursor-pointer uppercase flex items-center gap-2">
-              SelfHost Media Orchestrator
+              Media Manager
             </h1>
             
             <nav className="hidden md:flex items-center gap-5 text-sm font-medium">

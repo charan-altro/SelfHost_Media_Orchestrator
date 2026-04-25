@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Folder, ChevronRight, CornerLeftUp, HardDrive } from 'lucide-react';
-import { browseFileSystem, apiClient } from '../api/client';
+import { browseFileSystem, getDrives } from '../api/client';
 
 interface Drive { label: string; path: string; }
 
@@ -21,12 +21,18 @@ export const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({ isOpen, 
   useEffect(() => {
     if (isOpen) {
       loadPath(currentPath);
-      // Fetch Windows drive mounts (D:\ → /d_drive, etc.)
-      apiClient.get('/libraries/drives')
-        .then(r => setDrives(r.data.drives))
-        .catch(() => {});
+      loadDrives();
     }
   }, [isOpen]);
+
+  const loadDrives = async () => {
+    try {
+      const data = await getDrives();
+      setDrives(data);
+    } catch (err) {
+      console.error("Failed to load drives", err);
+    }
+  };
 
   const loadPath = async (path: string) => {
     setLoading(true);

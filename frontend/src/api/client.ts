@@ -1,169 +1,166 @@
-import axios from 'axios';
-
-export const apiClient = axios.create({
-  baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+// Wails Native API Bindings
+import * as App from '../../wailsjs/go/main/App';
 
 export const getMovies = async () => {
-  const res = await apiClient.get('/movies/');
-  return res.data;
+  return await App.GetMovies();
 };
 
 export const updateMovie = async (id: number, data: any) => {
-    const res = await apiClient.patch(`/movies/${id}`, data);
-    return res.data;
+    return await App.UpdateMovie(id, data);
 };
 
 export const getTVShows = async () => {
-  const res = await apiClient.get('/tvshows/');
-  return res.data;
+  return await App.GetTVShows();
 };
 
 export const getLibraries = async () => {
-  const res = await apiClient.get('/libraries/');
-  return res.data;
+  return await App.GetLibraries();
 };
 
 export const updateTVShow = async (id: number, data: any) => {
-    const res = await apiClient.patch(`/tvshows/${id}`, data);
-    return res.data;
+    return await App.UpdateTVShow(id, data);
 };
 
-
 export const getTVShowDetails = async (id: number) => {
-  const res = await apiClient.get(`/tvshows/${id}`);
-  return res.data;
+  return await App.GetTVShowDetails(id);
 };
 
 // Media Extras
 export const getTrailerUrl = async (type: 'movie' | 'tv', id: number) => {
-    const res = await apiClient.get(`/media/${type}/${id}/trailer`);
-    return res.data.trailer_url;
+    // Current Go implementation returns trailer_url in the model, but we can have a specific call
+    return "";
 };
 
 export const triggerTrailerFetch = async (type: 'movie' | 'tv', id: number) => {
-    const res = await apiClient.post(`/media/${type}/${id}/trailer`);
-    return res.data;
+    return {};
 };
 
 export const downloadSubtitles = async (type: 'movie' | 'episode', id: number, lang: string = 'en') => {
-    const endpoint = type === 'movie' ? `/movies/${id}/subtitles` : `/episodes/${id}/subtitles`;
-    const res = await apiClient.post(endpoint, null, { params: { language: lang } });
-    return res.data;
+    return {};
 };
 
 export const createLibrary = async (name: string, path: string, type: 'movie' | 'tv') => {
-    const response = await apiClient.post('/libraries/', { name, path, type, language: 'en' });
-    return response.data;
+    return await App.AddLibrary(name, path, type);
 };
 
 export const deleteLibrary = async (id: number) => {
-  const response = await apiClient.delete(`/libraries/${id}`);
-  return response.data;
+  return await App.DeleteLibrary(id);
 };
 
 export const updateLibrary = async (id: number, name?: string, path?: string) => {
-    const response = await apiClient.patch(`/libraries/${id}`, { name, path });
-    return response.data;
+    return await App.UpdateLibrary(id, { name, path });
 };
 
 export const scanLibrary = async (id: number) => {
-    const res = await apiClient.post(`/libraries/${id}/scan`);
-    return res.data;
+    return await App.ScanLibrary(id);
 };
 
 export const triggerScrape = async (movieId: number) => {
-    const res = await apiClient.post(`/movies/${movieId}/scrape`);
-    return res.data;
+    return await App.TriggerScrape(movieId);
 };
 
 export const triggerTVScrape = async (showId: number) => {
-    const res = await apiClient.post(`/tvshows/${showId}/scrape`);
-    return res.data;
+    return await App.TriggerTVScrape(showId);
 };
 
 export const browseFileSystem = async (path: string) => {
-    const res = await apiClient.get('/libraries/browse', { params: { path } });
-    return res.data;
+    return await App.BrowseFileSystem(path);
+};
+
+export const getDrives = async () => {
+    return await App.GetDrives();
+};
+
+export const getLocalArtwork = async (path: string) => {
+    return await App.GetLocalArtwork(path);
+};
+
+export const getTasks = async () => {
+    return await App.GetTasks();
 };
 
 export const bulkScrape = async (movieIds: number[]) => {
-    const res = await apiClient.post('/movies/scrape/bulk', { movie_ids: movieIds });
-    return res.data;
+    return await App.BulkScrapeMovies(movieIds);
 };
 
 export const bulkScrapeTV = async (showIds: number[]) => {
-    const res = await apiClient.post('/tvshows/scrape/bulk', { show_ids: showIds });
-    return res.data;
+    return await App.BulkScrapeTVShows(showIds);
 };
 
 export const cleanupLibrary = async (libraryId: number) => {
-    const res = await apiClient.post(`/libraries/${libraryId}/cleanup`);
-    return res.data;
+    return await App.CleanupLibrary(libraryId);
 };
 
 export const analyzeLibrary = async (libraryId: number) => {
-    const res = await apiClient.post(`/libraries/${libraryId}/analyze`);
-    return res.data;
+    // Stub
+    return {};
 };
 
 export const renameMovie = async (movieId: number) => {
-    const res = await apiClient.post(`/movies/${movieId}/rename`);
-    return res.data;
+    return await App.RenameMovie(movieId);
 };
 
 export const downloadSubtitle = async (movieId: number, language = 'en') => {
-    const res = await apiClient.post(`/movies/${movieId}/subtitles`, null, { params: { language } });
-    return res.data;
+    return {};
 };
 
 export const fetchTrailer = async (movieId: number) => {
-    const res = await apiClient.post(`/movies/${movieId}/trailer`);
-    return res.data;
+    return {};
 };
 
 export const searchExternalMovies = async (query: string, year?: number) => {
-    const res = await apiClient.get('/movies/search/external', { params: { query, year } });
-    return res.data;
+    return await App.SearchExternalMovie(query, year || 0);
 };
 
 export const manualMatchMovie = async (movieId: number, tmdbId: number) => {
-    const res = await apiClient.post(`/movies/${movieId}/match`, null, { params: { tmdb_id: tmdbId } });
-    return res.data;
+    return await App.MatchMovie(movieId, String(tmdbId));
 };
 
 export const searchExternalTV = async (query: string, year?: number) => {
-    const res = await apiClient.get('/tvshows/search/external', { params: { query, year } });
-    return res.data;
+    return await App.SearchExternalTV(query, year || 0);
 };
 
 export const manualMatchTV = async (showId: number, tmdbId: number) => {
-    const res = await apiClient.post(`/tvshows/${showId}/match`, null, { params: { tmdb_id: tmdbId } });
-    return res.data;
+    return await App.MatchTVShow(showId, String(tmdbId));
 };
 
 export const getSettings = async () => {
-    const res = await apiClient.get('/settings/');
-    return res.data;
+    return await App.GetSettings();
 };
 
 export const patchSettings = async (data: Record<string, any>) => {
-    const res = await apiClient.patch('/settings/', data);
-    return res.data;
+    return await App.PatchSettings(data);
 };
 
 export const getDownloadUrl = (type: 'movie' | 'episode', id: number) => {
-    return `/api/media/download/${type}/${id}`;
+    // In Wails, we don't use download URLs, we use App.DownloadMedia
+    return "";
 };
 
-export const exportLibraryCSV = () =>
-    window.open('/api/export/csv', '_blank');
+export const exportLibraryCSV = async () => {
+    return await App.ExportCSV();
+};
 
-export const exportLibraryHTML = () =>
-    window.open('/api/export/html', '_blank');
+export const exportLibraryHTML = async () => {
+    return await App.ExportHTML();
+};
 
+export const downloadMediaNative = async (type: 'movie' | 'episode', id: number) => {
+    return await App.DownloadMedia(type, id);
+};
 
+export const showInFolder = async (path: string) => {
+    return await App.ShowInFolder(path);
+};
 
+export const openInPlayer = async (path: string) => {
+    return await App.OpenInPlayer(path);
+};
+
+export const playMovie = async (id: number) => {
+    return await App.PlayMovie(id);
+};
+
+export const playEpisode = async (id: number) => {
+    return await App.PlayEpisode(id);
+};

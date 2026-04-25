@@ -1,0 +1,161 @@
+ I have created appliction SelfHost_Media_Orchestrator_PYTHON and migrated into go langagure SelfHost_Media_Orchestrator_GO but still so many features
+   are missing can you review both code base and find out what all are missing in GO
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+✦ I will begin by exploring the Python codebase to identify its core features and API endpoints, and then I'll examine the Go project to see what has been
+  migrated and what is still missing.
+
+  ✓  ReadFolder  SelfHost_Media_O...r_PYTHON/backend → Found 10 item(s).
+  ✓  ReadFolder  SelfHost_Media_O...ator_GO/internal → Found 4 item(s).
+
+✦ I'll examine the Python api and services directories to identify the available endpoints and business logic, which will help me determine what needs to be
+  compared with the Go implementation.
+
+  ✓  ReadFolder  SelfHost_Media_O...THON/backend/api → Found 10 item(s).
+  ✓  ReadFolder  SelfHost_Media_O...backend/services → Found 13 item(s).
+  ✓  ReadFolder  SelfHost_Media_O.../backend/workers → Directory is empty.
+
+✦ I'll check the Go project's services and models to see what has been implemented, and I'll also investigate main.py and the core directory in the Python
+  project to understand how background tasks are handled since the workers directory is empty.
+
+  ✓  ReadFolder  SelfHost_Media_O...nternal/services → Found 22 item(s).
+  ✓  ReadFolder  SelfHost_Media_O.../internal/models → Found 2 item(s).
+
+✦ I'll check the Go project's app.go to see which Wails bindings are exposed, which will reveal what the frontend can call, and I'll also compare the file
+  sizes and presence of services like cleanup, mediainfo, subtitles, and trailers to identify potential gaps in the Go implementation.
+
+  ✓  ReadFile  SelfHost_Media_Orches...\...\app.go
+
+✦ I'll compare the Go bindings with the Python API to identify missing functionality, specifically examining media_extras.py in Python and the subtitles.py
+  and trailers.py services, while also reviewing the already identified mappings for artwork, export, libraries, movies, NFO, settings, tasks, and TV shows.
+
+  ✓  ReadFile  SelfHost_Med...\...\media_extras.py
+  ✓  ReadFile  SelfHost_Media_...\...\subtitles.py
+  ✓  ReadFile  SelfHost_Media_O...\...\trailers.py
+  ✓  ReadFile  SelfHost_Med...\...\media_extras.py
+  ✓  ReadFile  SelfHost_Media_...\...\subtitles.py
+
+✦ I've identified several missing features in the Go implementation, including subtitle and trailer services, as well as potential gaps in media info,
+  cleanup, library scanning, and NFO reading; I'll now examine the Python mediainfo.py and cleanup.py files to better understand the missing logic.
+
+  ✓  ReadFile  SelfHost_Media_...\...\mediainfo.py
+  ✓  ReadFile  SelfHost_Media_Or...\...\cleanup.py
+  ✓  ReadFile  SelfHost_Media_...\...\mediainfo.py
+
+✦ The Python CleanupService offers extensive features like duplicate artwork removal, folder cleanup, and NFO regeneration; I'll now examine the Go
+  cleanup.go to determine which of these have been implemented.
+
+  ✓  ReadFile  SelfHost_Media_Or...\...\cleanup.go
+
+✦ Go's CleanupLibrary lacks several key Python features, including physical duplicate artwork and empty folder removal, filename fixing, NFO regeneration,
+  and orphan purging; I'll now compare the scanning functionality in Python's scanner.py and Go's scanner.go.
+
+  ✓  ReadFile  SelfHost_Media_Or...\...\scanner.py
+  ✓  ReadFile  SelfHost_Media_Or...\...\scanner.go
+
+✦ Go's scanning is less efficient than Python's due to its lack of parallelism and caching, and it also misses technical metadata extraction; overall, the
+  Go implementation is lacking in subtitle/trailer services, advanced cleanup logic, scan efficiency, and potentially export details, which I'll further
+  investigate by comparing exporter.py and exporter.go.
+
+  ✓  ReadFile  SelfHost_Media_O...\...\exporter.py
+  ✓  ReadFile  SelfHost_Media_O...\...\exporter.go
+
+✦ Go's export functionality is more minimal than Python's, lacking backup_library_to_json and several metadata fields in HTML/CSV; I'll now examine
+  artwork_api.py to compare how artwork is served.
+
+  ✓  ReadFile  SelfHost_Medi...\...\artwork_api.py
+
+✦ Python's FileResponse is more efficient than Go's base64 approach for serving artwork; I'll now check Migration_Plan_Go_Wails.md to see what features were
+  intended for the Go implementation.
+
+  ✓  ReadFile  S...\...\Migration_Plan_Go_Wails.md
+
+✦ The Go implementation is missing subtitle and trailer services, technical media info extraction, and JSON backup/export, while cleanup and scanning
+  services are incomplete and less efficient than their Python counterparts; additionally, several API bindings and concurrency optimizations are absent,
+  and image serving is less efficient. I'll now check for any missing fields in the Go models compared to the Python ones.
+
+  ✓  ReadFile  SelfHost_Media_Orch...\...\media.py
+  ✓  ReadFile  SelfHost_Media_Orch...\...\media.go
+
+✦ I've completed a thorough comparison of the Python and Go codebases and identified several significant gaps in the Go implementation. While the data
+  models are well-synchronized, the Go version lacks critical services like subtitle and trailer management, technical metadata extraction (e.g.,
+  resolution, codecs), and advanced cleanup features like duplicate artwork removal and filename fixing. Additionally, the Go scanner is less efficient due
+  to its sequential nature and lack of caching, and the export functionality is far more limited than the Python original.
+
+  Missing Features in the Go Implementation
+
+  1. Metadata & Media Analysis
+   * Technical Media Info Extraction: The Python backend uses pymediainfo to extract resolution (4K, 1080p, etc.), HDR type, and audio/video codecs. The Go
+     implementation lacks this, leaving these fields empty in the database.
+   * Subtitles Service: Python integrates with the OpenSubtitles API to search and download subtitles. This service and its corresponding UI bindings are
+     completely missing in Go.
+   * Trailer Service: Python fetches official YouTube trailers via TMDB. The Go version has the database fields but no logic or API to actually fetch them.
+
+  2. Advanced Cleanup & Maintenance
+   * Duplicate Artwork Removal: Python uses MD5 hashing to find and remove identical artwork files saved under different names. Go lacks this physical file
+     cleanup.
+   * Empty Folder Cleanup: Python features an intelligent leaf-node detection system to remove folders that only contain metadata but no media.
+   * NFO Regeneration: Python can detect missing .nfo files and regenerate them from the database; Go only generates them during the initial scrape.
+   * Filename Fixing: Python includes logic to fix filenames with problematic patterns like empty brackets ([]) or parentheses.
+
+  3. Performance & Scaling
+   * Sequential Scanning: The Go scanner processes files one by one. The Python version uses multi-threading, which is significantly faster for large
+     libraries (e.g., NAS or network shares).
+   * Lack of Caching: Python pre-loads existing paths into memory during a scan to avoid redundant database hits. Go queries the database for every single
+     file found, which will cause performance degradation as the library grows.
+
+  4. Export & Data Management
+   * JSON Backup: Python includes a full library backup to JSON.
+   * Minimalist Exports: Go's CSV and HTML exports are missing several key fields present in Python, such as Plot, Genres, IMDB Rating, and IMDB ID.
+
+  5. User Experience Gaps
+   * Image Serving Efficiency: Go serves local artwork by converting it to Base64 data URIs. This is significantly slower and more memory-intensive for the
+     frontend than Python's direct file streaming approach.
+   * Broken UI Bindings: Since the underlying Go methods for subtitles, trailers, and advanced cleanup are missing, any corresponding buttons or tabs in the
+     migrated frontend will be non-functional.
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+ > how we can migrate all the Missing Features in the Go Implementation
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+✦ To migrate the missing features effectively, we should follow a structured plan that prioritizes the core infrastructure first, followed by the external
+  services and maintenance tools.
+
+  Phase 1: Performance & Infrastructure
+  The most immediate improvement is to make the Go backend as fast as the Python one by implementing parallel processing and caching.
+
+   * Parallel Scanner: Update internal/services/scanner.go to use a worker pool (goroutines) and sync.WaitGroup.
+   * Scanning Cache: Pre-load existing file paths into a map[string]bool at the start of a scan to eliminate redundant database queries.
+   * Asset Handler: Replace the Base64 image serving in app.go with a custom Wails AssetHandler. This allows the frontend to load images via standard
+     src="http://wails.localhost/media/path/to/image.jpg" URLs, which is much faster and supports browser caching.
+
+  Phase 2: Technical Metadata & Analysis
+  The Python version uses MediaInfo to get resolution and codecs. We need to replicate this in Go.
+
+   * Implement MediaInfo: Use a Go wrapper for mediainfo or ffprobe. If you want to avoid external dependencies, you can execute the command-line version
+     and parse the JSON output.
+   * Update Scanner: Integrate the metadata extraction into the scanning loop so that resolution, video_codec, and audio_codec are populated automatically.
+
+  Phase 3: External Services (Subtitles & Trailers)
+  These features require implementing new API clients in Go.
+
+   * OpenSubtitles Client: Create internal/services/subtitles.go. Use the OpenSubtitles v3 REST API. You'll need to implement the "Search" and "Download"
+     endpoints.
+   * TMDB Video Scraper: Update your existing TMDB scraper in internal/services/scraper/ to call the /movie/{id}/videos endpoint to find YouTube trailer
+     keys.
+   * Wails Bindings: Add DownloadSubtitle and FetchTrailer methods to app.go so the frontend can trigger these actions.
+
+  Phase 4: Advanced Maintenance Tools
+  Port the "Smart Cleanup" logic from Python to Go.
+
+   * Duplicate Artwork Finder: Implement a utility that walks the library, calculates MD5 hashes for the first 64KB of images, and identifies duplicates.
+   * Folder Cleanup: Port the "leaf-node" detection logic to Go to safely remove empty directories.
+   * NFO & Filename Fixer: Implement the RegenerateNFO and RenameToTitle logic using Go's encoding/xml and os.Rename.
+
+  Phase 5: Data Portability
+  Enhance the export system to match Python’s depth.
+
+   * JSON Backup: Implement a BackupLibrary function that uses Go's json.MarshalIndent to export the entire library structure.
+   * Enhanced CSV/HTML: Update internal/services/exporter.go to include the missing Plot, Genres, and IMDB metadata fields.
+
+  ---
+
+  Would you like me to start by implementing one of these phases? I recommend starting with Phase 1 (Parallel Scanning and Efficient Image Serving) as it
+  provides the biggest immediate impact on the application's feel and performance.

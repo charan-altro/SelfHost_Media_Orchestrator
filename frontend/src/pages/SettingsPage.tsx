@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/store';
-import { createLibrary, updateLibrary, analyzeLibrary } from '../api/client';
+import { createLibrary, updateLibrary, analyzeLibrary, getSettings } from '../api/client';
 import { exportLibraryCSV, exportLibraryHTML, patchSettings } from '../api/client';
 import { FolderPlus, Settings as SettingsIcon, Trash2, FolderSearch, Sparkles, Download, Key, Edit3, Database, Search } from 'lucide-react';
 import { FolderBrowserModal } from '../components/FolderBrowserModal';
@@ -249,6 +249,22 @@ const ApiKeysSection = () => {
   const [omdb, setOmdb] = useState('');
   const [osubs, setOsubs] = useState('');
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const settings = await getSettings();
+        if (settings && settings.api_keys) {
+          setTmdb(settings.api_keys.tmdb || '');
+          setOmdb(settings.api_keys.omdb || '');
+          setOsubs(settings.api_keys.opensubtitles || '');
+        }
+      } catch (err) {
+        console.error('Failed to load settings', err);
+      }
+    };
+    loadSettings();
+  }, []);
 
   const handleSave = async () => {
     await patchSettings({

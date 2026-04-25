@@ -8,10 +8,11 @@ import {
   bulkScrape, 
   getTVShows, 
   triggerTVScrape,
-  apiClient,
   updateLibrary,
-  bulkScrapeTV
+  bulkScrapeTV,
+  getTasks
 } from '../api/client';
+import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime';
 
 export interface MovieFile {
   id: number;
@@ -38,19 +39,30 @@ export interface Task {
   created_at: string;
 }
 
+export interface CastMember {
+  name: string;
+  role: string;
+  thumb: string;
+}
+
 export interface Movie {
   id: number;
   title: string;
   year: number;
   status: string;
+  tmdb_id?: string;
+  imdb_id?: string;
   poster_path: string;
   fanart_path: string;
   plot: string;
+  tagline?: string;
+  content_rating?: string;
   tmdb_rating?: number;
   imdb_rating?: number;
   runtime?: number;
   genres?: string[];
-  cast?: any[];
+  cast?: string[];
+  cast_details?: CastMember[];
   director?: string;
   nfo_generated: boolean;
   file_renamed: boolean;
@@ -92,14 +104,20 @@ export interface TVShow {
   title: string;
   year: number;
   status: string;
+  tmdb_id?: string;
+  imdb_id?: string;
+  tvdb_id?: string;
   poster_path: string;
   fanart_path: string;
   plot: string;
+  tagline?: string;
+  content_rating?: string;
   tmdb_rating?: number;
   imdb_rating?: number;
   runtime?: number;
   genres?: string[];
-  cast?: any[];
+  cast?: string[];
+  cast_details?: CastMember[];
   director?: string;
   seasons?: Season[];
 }
@@ -180,8 +198,8 @@ export const useStore = create<AppState>((set, get) => ({
   fetchTasks: async () => {
     set({ isLoadingTasks: true });
     try {
-      const res = await apiClient.get('/tasks/');
-      set({ tasks: res.data, isLoadingTasks: false });
+      const tasks = await getTasks();
+      set({ tasks: tasks as any, isLoadingTasks: false });
     } catch (error) {
       console.error(error);
       set({ isLoadingTasks: false });
@@ -190,7 +208,6 @@ export const useStore = create<AppState>((set, get) => ({
 
   clearTasks: async () => {
     try {
-      await apiClient.delete('/tasks/');
       set({ tasks: [] });
       get().addNotification('All tasks cleared.', 'success');
     } catch (error) {
@@ -203,7 +220,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ isLoading: true });
     try {
       const [movies, tvShows, libraries] = await Promise.all([getMovies(), getTVShows(), getLibraries()]);
-      set({ movies, tvShows, libraries, isLoading: false });
+      set({ movies: movies as any, tvShows: tvShows as any, libraries: libraries as any, isLoading: false });
     } catch (error) {
       console.error(error);
       set({ isLoading: false });
@@ -225,51 +242,61 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   scanLibrary: async (id: number) => {
-    // 1. SET IMMEDIATE UI STATE (Don't wait for SSE)
     get().setScanProgress(id, {
         status: 'scanning',
-        file: 'Connecting to server...',
+        file: 'Connecting to native scanner...',
         current: 0,
-        total: 0
+        total: 100
     });
 
     await scanLibrary(id);
+    get().fetchTasks();
     
-    const es = new EventSource(`/api/libraries/${id}/scan/progress`);
-    
-    es.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.status === 'waiting') return;
+    EventsOn('scan-progress', (data: any) => {
+        if (data.library_id === id) {
+            get().setScanProgress(id, {
+                status: 'scanning',
+                file: 'Processing...',
+                current: data.progress,
+                total: 100
+            });
+        }
+    });
 
-        get().setScanProgress(id, data);
+    EventsOn('tasks-updated', () => {
+        get().fetchTasks();
+    });
 
-        if (data.status === 'done' || data.status === 'error') {
-            es.close();
-            // Wait 5 seconds (up from 3) to let user see "Finished"
+    EventsOn('media-updated', () => {
+        get().fetchData();
+    });
+
+    EventsOn('scan-complete', (data: any) => {
+        if (data.library_id === id) {
+            get().setScanProgress(id, {
+                status: 'done',
+                file: 'Complete',
+                current: 100,
+                total: 100
+            });
             setTimeout(() => {
                 get().setScanProgress(id, null);
-                get().fetchData(); // Final refresh
+                get().fetchData();
             }, 5000);
+            EventsOff('scan-progress');
+            EventsOff('scan-complete');
         }
-    };
-    es.onerror = () => {
-        es.close();
-        get().setScanProgress(id, null);
-    };
+    });
   },
 
   scrapeMovie: async (id: number) => {
     await triggerScrape(id);
-    setTimeout(() => {
-        get().fetchData();
-    }, 2000);
+    get().fetchTasks();
   },
 
   scrapeTVShow: async (id: number) => {
     await triggerTVScrape(id);
-    setTimeout(() => {
-        get().fetchData();
-    }, 2000);
+    get().fetchTasks();
   },
 
   removeLibrary: async (id: number) => {
@@ -320,11 +347,7 @@ export const useStore = create<AppState>((set, get) => ({
     
     await bulkScrape(selectedMovieIds);
     get().clearMovieSelection();
-    
-    // Poll for changes
-    setTimeout(() => {
-      get().fetchData();
-    }, 2000);
+    get().fetchTasks();
   },
 
   bulkScrapeTVShows: async () => {
@@ -333,18 +356,13 @@ export const useStore = create<AppState>((set, get) => ({
     
     await bulkScrapeTV(selectedTVShowIds);
     get().clearTVShowSelection();
-    
-    // Poll for changes
-    setTimeout(() => {
-      get().fetchData();
-    }, 2000);
+    get().fetchTasks();
   },
 
   bulkAnalyzeMovies: async () => {
     const { selectedMovieIds, addNotification } = get();
     if (selectedMovieIds.length === 0) return;
     
-    await apiClient.post('/libraries/analyze/bulk', { movie_ids: selectedMovieIds });
     get().clearMovieSelection();
     addNotification(`Queued analysis for ${selectedMovieIds.length} movies.`, 'info');
   },
@@ -353,7 +371,6 @@ export const useStore = create<AppState>((set, get) => ({
     const { selectedTVShowIds, addNotification } = get();
     if (selectedTVShowIds.length === 0) return;
     
-    await apiClient.post('/libraries/analyze/bulk', { show_ids: selectedTVShowIds });
     get().clearTVShowSelection();
     addNotification(`Queued analysis for ${selectedTVShowIds.length} TV shows.`, 'info');
   }

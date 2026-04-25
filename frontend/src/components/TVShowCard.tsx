@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { TVShow, useStore } from '../store/store';
 import { CheckCircle2, AlertCircle, Play, Info, ChevronDown } from 'lucide-react';
 import { MediaDetailsModal } from './MediaDetailsModal';
+import { Artwork } from './Artwork';
 
 interface Props {
   show: TVShow;
@@ -14,15 +15,6 @@ export const TVShowCard = ({ show, onScrape, isSelected = false, onToggleSelect 
   const [showDetails, setShowDetails] = useState(false);
   const isMatched = show.status === 'matched';
   
-  const resolveArtwork = (path: string | null | undefined, type: 'poster' | 'fanart' = 'poster') => {
-    if (!path) return null;
-    if (path.startsWith('local://')) {
-      return `/api/artwork/local?path=${encodeURIComponent(path.replace('local://', ''))}`;
-    }
-    const base = type === 'poster' ? 'https://image.tmdb.org/t/p/w500' : 'https://image.tmdb.org/t/p/original';
-    return `${base}${path}`;
-  };
-
   return (
     <>
     <div 
@@ -31,8 +23,9 @@ export const TVShowCard = ({ show, onScrape, isSelected = false, onToggleSelect 
     >
       <div className="aspect-[2/3] w-full relative">
         {show.poster_path ? (
-          <img 
-            src={resolveArtwork(show.poster_path, 'poster')!} 
+          <Artwork 
+            path={show.poster_path} 
+            type="poster" 
             alt={show.title}
             className="w-full h-full object-cover transition-transform duration-500"
           />

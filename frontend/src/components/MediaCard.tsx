@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Movie, useStore } from '../store/store';
 import { CheckCircle2, AlertCircle, Play, Info, ChevronDown } from 'lucide-react';
 import { MediaDetailsModal } from './MediaDetailsModal';
+import { Artwork } from './Artwork';
+import { playMovie } from '../api/client';
 
 interface Props {
   movie: Movie;
@@ -14,15 +16,6 @@ export const MediaCard = ({ movie, onScrape, isSelected = false, onToggleSelect 
   const [showDetails, setShowDetails] = useState(false);
   const isMatched = movie.status === 'matched';
   
-  const resolveArtwork = (path: string | null | undefined, type: 'poster' | 'fanart' = 'poster') => {
-    if (!path) return null;
-    if (path.startsWith('local://')) {
-      return `/api/artwork/local?path=${encodeURIComponent(path.replace('local://', ''))}`;
-    }
-    const base = type === 'poster' ? 'https://image.tmdb.org/t/p/w500' : 'https://image.tmdb.org/t/p/original';
-    return `${base}${path}`;
-  };
-
   return (
     <>
     <div 
@@ -31,8 +24,9 @@ export const MediaCard = ({ movie, onScrape, isSelected = false, onToggleSelect 
     >
       <div className="aspect-[2/3] w-full relative">
         {movie.poster_path ? (
-          <img 
-            src={resolveArtwork(movie.poster_path, 'poster')!} 
+          <Artwork 
+            path={movie.poster_path} 
+            type="poster" 
             alt={movie.title}
             className="w-full h-full object-cover transition-transform duration-500"
           />
@@ -46,7 +40,11 @@ export const MediaCard = ({ movie, onScrape, isSelected = false, onToggleSelect 
         {/* Gradient Overlay on Hover */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
           <div className="flex items-center gap-2 mb-2 translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
-            <button className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-zinc-200 transition-colors">
+            <button 
+              onClick={(e) => { e.stopPropagation(); playMovie(movie.id); }}
+              className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-zinc-200 transition-colors"
+              title="Play Movie"
+            >
               <Play className="w-4 h-4 text-black ml-1" fill="currentColor" />
             </button>
             <button className="w-8 h-8 rounded-full bg-zinc-800/80 border border-zinc-500 flex items-center justify-center hover:border-white transition-colors">
