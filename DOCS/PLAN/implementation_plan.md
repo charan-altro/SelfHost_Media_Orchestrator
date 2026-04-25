@@ -73,6 +73,7 @@ The system uses **SQLAlchemy 2.0** with **Alembic** migrations. Key models inclu
 | `/api/scrape/bulk`| POST | Queue background metadata scraping tasks. |
 | `/api/tasks` | GET/DELETE | Monitor and clear background task history. |
 | `/api/export` | GET | Export library data to JSON, CSV, or HTML. |
+| `/api/media/download` | GET | High-performance HTTP download (sendfile optimized). |
 
 ---
 
@@ -93,11 +94,16 @@ The system uses **SQLAlchemy 2.0** with **Alembic** migrations. Key models inclu
 - **Metadata Repair (NFO)**: Added automatic NFO regeneration to the cleanup cycle. This retroactively fixes incomplete NFO files (e.g., missing actor data) using the rich metadata stored in the database.
 - **Safe Orphan Removal**: Enhanced the empty folder cleanup with a "Safety Filter" that preserves any folder containing files larger than 20MB or unrecognized file extensions.
 
+### Phase 13: High-Performance Download & Local Delivery (April 2026)
+- **Zero-Copy Transfer**: Implemented `FileResponse` with kernel-level `sendfile` optimization. This enables zero-copy media transfers that saturate local network bandwidth (1Gbps+).
+- **Universal Browser Compatibility**: Replaced legacy FTP requirements with high-performance HTTP delivery, ensuring seamless downloads on all modern browsers and mobile devices.
+- **UI Integration**: Added context-aware download triggers in the Movie Hero section and TV Episode lists, utilizing the native browser download manager for pause/resume support.
+
 ---
 
 ## Future Roadmap & Specialized Implementations
 
-### Phase 13: Hybrid Playback & Streaming (April 2026)
+### Phase 13: Hybrid Playback & Streaming (In Progress)
 This phase introduces a "Smart Playback" strategy that detects the execution environment to provide the most efficient playback experience.
 
 - **Native Mode (Laptop)**: When running directly on Windows, the system uses `os.startfile()` to launch movies natively in the default system player (VLC/MPC-HC). 

@@ -1,5 +1,8 @@
 import asyncio
+import os
+import mimetypes
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from backend.core.db import get_db
 from backend.models.media import Movie, MovieFile, TVShow, Episode
@@ -7,6 +10,39 @@ from backend.services.subtitles import fetch_best_subtitle
 from backend.services.trailers import fetch_trailer_url
 
 router = APIRouter(prefix="/api", tags=["Media Extras"])
+
+
+# ──────────────────────────── Download ────────────────────────────
+
+@router.get("/media/download/{media_type}/{item_id}")
+def download_media_file(media_type: str, item_id: int, db: Session = Depends(get_db)):
+    """
+    High-performance download of a media file over HTTP.
+    Uses FileResponse which leverages 'sendfile' for zero-copy transfers where supported.
+    """
+    file_path = None
+    filename = None
+
+    if media_type == "movie":
+        movie = db.query(Movie).filter(Movie.id == item_id).first()
+        if movie and movie.files:
+            file_path = movie.files[0].file_path
+            filename = os.path.basename(file_path)
+    elif media_type == "episode":
+        ep = db.query(Episode).filter(Episode.id == item_id).first()
+        if ep and ep.file_path:
+            file_path = ep.file_path
+            filename = os.path.basename(file_path)
+
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Media file not found")
+
+    content_type, _ = mimetypes.guess_type(file_path)
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type=content_type or "application/octet-stream"
+    )
 
 
 # ──────────────────────────── Subtitles ────────────────────────────

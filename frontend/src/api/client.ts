@@ -155,6 +155,10 @@ export const patchSettings = async (data: Record<string, any>) => {
     return res.data;
 };
 
+export const getDownloadUrl = (type: 'movie' | 'episode', id: number) => {
+    return `/api/media/download/${type}/${id}`;
+};
+
 export const exportLibraryCSV = () =>
     window.open('/api/export/csv', '_blank');
 

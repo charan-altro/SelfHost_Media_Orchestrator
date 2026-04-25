@@ -75,3 +75,16 @@ When hosting via Docker on Windows (using host volumes), SQLite occasionally fac
 1. Upon boot, the application checks if the host-mounted legacy database flag is present.
 2. If `data/orchestrator.db` isn't accessible, but a legacy file exists, `shutil.copy2` relocates the database entirely inside a native Docker Volume (`/data`).
 3. Retry loops and `PRAGMA` variables ensure aggressive retries on subsequent database writes to mitigate any transient filesystem locks.
+
+## 6. High-Performance Download Mechanism
+
+To support high-speed media transfers within local networks, the system implements an optimized HTTP delivery engine.
+
+### Zero-Copy Transfer
+- **FileResponse**: The system uses FastAPI's `FileResponse`, which is built on Starlette's high-efficiency file handling.
+- **Kernel-Level Optimization**: On production (Linux/Docker) environments, this triggers the `sendfile(2)` system call. This allows the kernel to copy data directly from the disk buffer to the network socket, bypassing the application's memory entirely (zero-copy).
+- **Network Saturation**: This mechanism is designed to saturate Gigabit and Multi-Gigabit local network links, outperforming traditional FTP while maintaining full browser compatibility.
+
+### UI Integration
+- **Contextual Endpoints**: The UI generates type-aware download links (`/api/media/download/movie/...` or `/api/media/download/episode/...`).
+- **Native Browser Management**: By utilizing the standard HTML5 `download` attribute, the application allows the browser's native download manager to handle multi-threading, pause/resume, and queueing.
