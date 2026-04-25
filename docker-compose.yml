@@ -8,13 +8,15 @@ services:
     volumes:
       - ./config:/config
       - ./media:/media
-      - ./data:/data
+      - db-data:/data # <--- Change this from ./data:/data
       # Universal Drive Mapping (Define these in your .env file)
-      - ${DRIVE_D_PATH:-./media/d_placeholder}:/mnt/d
+      - fastmedia_share:/mnt/d
       #- ${DRIVE_E_PATH:-./media/e_placeholder}:/mnt/e
       #- ${DRIVE_F_PATH:-./media/f_placeholder}:/mnt/f
 
     environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
       - CONFIG_DIR=/config
       - MEDIA_DIR=/media
       - DATABASE_DIR=/data
@@ -26,4 +28,9 @@ services:
     restart: unless-stopped
 
 volumes:
-  db-data:
+  db-data: # <--- Define the volume here
+  fastmedia_share:
+    driver_opts:
+      type: cifs
+      o: "username=${SMB_USER},password=${SMB_PASSWORD},vers=3.0"
+      device: "//192.168.1.9/FastMedia"

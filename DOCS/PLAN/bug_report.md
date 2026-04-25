@@ -68,3 +68,38 @@ This document serves as the official registry of all critical bugs identified an
 - **Description**: The background cleanup task crashed with a Python error when trying to regenerate NFO files.
 - **Root Cause**: The code assumed `movie.cast` and `movie.genres` were SQLAlchemy relationship objects, but they are actually `JSON` columns that return standard Python dictionaries and lists.
 - **Resolution**: Corrected the iteration logic in `CleanupService.regenerate_nfos` to use dictionary-safe access for the cast and genre metadata fields.
+
+## 14. SQLite `OperationalError`: attempt to write a readonly database
+- **Description**: App startup failed on Windows/Docker environments with `sqlite3.OperationalError: attempt to write a readonly database`.
+- **Root Cause**: SQLite databases stored on host-mounted Windows directories (via Docker volumes) often face permission or locking issues, especially when using WAL mode. The `/config` directory was mapped to a host path that became read-only within the container's security context.
+- **Resolution**: Implemented an automatic database migration on startup. The app now detects if the database is in the legacy `/config` (host-mount) and automatically migrates it to a high-performance, writable Docker named volume (`/data/orchestrator.db`). Added `try/except` blocks around SQLite PRAGMA settings to gracefully fall back if WAL mode is unsupported by the underlying file system.
+
+
+# Bug Report & Resolutions
+
+## Resolved Issues (April 2026 Optimization Pass)
+
+### 1. Database Lock during Large Scans
+- **Issue:** `sqlite3.OperationalError: database is locked` occurred during the registration of 600+ episodes.
+- **Cause:** A long-running write transaction was holding the database lock, preventing the Task Manager from updating the progress table.
+- **Fix:** Implemented "Batched Commits" (every 50 items) and passed the existing session to the `update_task` helper to ensure all updates happen within the same transaction.
+
+### 2. Identity Import ID Mismatch
+- **Issue:** Identity Import would only see 1 item even after a 300+ file scan.
+- **Cause:** Database IDs were not assigned until the final commit, causing the scanner to pass a list of `None` IDs to the background task.
+- **Fix:** Added `db.flush()` inside the registration loop to assign IDs immediately without the overhead of a full disk commit.
+
+### 3. Permission Denied (Errno 13) Crashes
+- **Issue:** The scraper would crash entirely if a movie folder was marked as "Read-only" in Windows.
+- **Cause:** Lack of error handling during `open(nfo_path, "w")` and artwork downloads.
+- **Fix:** Wrapped all physical file writes in `try-except PermissionError` blocks. The system now logs a warning and proceeds with database updates.
+
+### 4. TV Show Episode Attribution Error
+- **Issue:** `type object 'Episode' has no attribute 'show_id'`.
+- **Cause:** Attempting to query `Episode.show_id` directly, but the relationship is nested: `Episode -> Season -> TVShow`.
+- **Fix:** Updated the SQLAlchemy query to join `Season` and select `Season.show_id`.
+
+### 5. Syntax/Indentation Errors in Cleanup Report
+- **Issue:** `IndentationError: unexpected indent` prevented the server from starting.
+- **Cause:** Misaligned `f.write` calls outside of the `with open` block during a code replacement.
+- **Fix:** Refactored the `_background_cleanup` function to ensure valid Python syntax and correct block nesting.

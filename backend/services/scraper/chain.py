@@ -26,7 +26,7 @@ class ScraperChain:
 
     async def scrape_movie_by_id(self, tmdb_id: int) -> dict:
         """Fetch and combine metadata for a movie by its TMDB ID."""
-        # 2. Get full TMDB details
+        # 1. Get full TMDB details
         tmdb_details = await self.tmdb.get_movie_details(str(tmdb_id))
         if not tmdb_details:
             return {}
@@ -57,7 +57,7 @@ class ScraperChain:
             "images": tmdb_details.get("images", {})
         }
 
-        # 3. Enrich with IMDb rating/votes
+        # 2. Enrich with IMDb rating/votes concurrently if needed
         omdb_metadata = {}
         if imdb_id:
             imdb_enrichment = await self.omdb.get_imdb_data(imdb_id=imdb_id)
@@ -71,8 +71,7 @@ class ScraperChain:
                         self.cinemagoer.get_imdb_data, 
                         imdb_id
                     )
-                except Exception as e:
-                    print(f"Fallback crash: {e}")
+                except: pass
 
             if imdb_enrichment:
                 omdb_metadata = {
@@ -82,13 +81,8 @@ class ScraperChain:
                     "content_rating": imdb_enrichment.get("content_rating")
                 }
 
-        # 4. Use Combiner to merge intelligently
-        scraper_payloads = {
-            "tmdb": tmdb_metadata,
-            "omdb": omdb_metadata
-        }
-        
-        return self.combiner.combine(scraper_payloads)
+        # 3. Use Combiner
+        return self.combiner.combine({"tmdb": tmdb_metadata, "omdb": omdb_metadata})
 
     async def scrape_tvshow(self, title: str, year: int = None) -> dict:
         """
@@ -104,7 +98,7 @@ class ScraperChain:
 
     async def scrape_tvshow_by_id(self, tmdb_id: int) -> dict:
         """Fetch and combine metadata for a TV show by its TMDB ID."""
-        # 2. Get full TMDB TV details
+        # 1. Get full TMDB TV details
         tmdb_details = await self.tmdb.get_tv_details(str(tmdb_id))
         if not tmdb_details:
             return {}
@@ -115,7 +109,6 @@ class ScraperChain:
         created_by = tmdb_details.get("created_by", [])
         director = created_by[0]["name"] if created_by else None
 
-        # Basic TMDB extracted payload setup
         tmdb_metadata = {
             "tmdb_id": str(tmdb_id),
             "imdb_id": imdb_id,
@@ -132,31 +125,32 @@ class ScraperChain:
             "images": tmdb_details.get("images", {})
         }
 
-        # 3. Enrich with IMDb rating/content rating
-        omdb_metadata = {}
-        if imdb_id:
-            imdb_enrichment = await self.omdb.get_imdb_data(imdb_id=imdb_id)
-            if imdb_enrichment:
-                omdb_metadata = {
-                    "imdb_rating": imdb_enrichment.get("imdb_rating"),
-                    "content_rating": imdb_enrichment.get("content_rating")
-                }
-
-        # 4. Use Combiner
-        scraper_payloads = {
-            "tmdb": tmdb_metadata,
-            "omdb": omdb_metadata
-        }
+        # 2. Concurrent Enrichment & Season Fetching
+        enrich_task = self.omdb.get_imdb_data(imdb_id=imdb_id) if imdb_id else asyncio.sleep(0)
         
-        final_series_meta = self.combiner.combine(scraper_payloads)
-        
-        # 5. Fetch Seasons
-        seasons_meta = {}
+        season_tasks = []
         for season in tmdb_details.get("seasons", []):
             s_num = season.get("season_number")
-            s_data = await self.tmdb.get_tv_season(str(tmdb_id), s_num)
+            season_tasks.append(self.tmdb.get_tv_season(str(tmdb_id), s_num))
+
+        # Run everything in parallel!
+        results = await asyncio.gather(enrich_task, *season_tasks)
+        
+        imdb_enrichment = results[0]
+        omdb_metadata = {}
+        if imdb_enrichment and isinstance(imdb_enrichment, dict):
+            omdb_metadata = {
+                "imdb_rating": imdb_enrichment.get("imdb_rating"),
+                "content_rating": imdb_enrichment.get("content_rating")
+            }
+
+        seasons_meta = {}
+        for i, s_data in enumerate(results[1:]):
             if s_data:
+                s_num = tmdb_details.get("seasons", [])[i].get("season_number")
                 seasons_meta[s_num] = s_data
+
+        final_series_meta = self.combiner.combine({"tmdb": tmdb_metadata, "omdb": omdb_metadata})
                 
         return {
             "series": final_series_meta,

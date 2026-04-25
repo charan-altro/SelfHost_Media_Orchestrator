@@ -44,20 +44,16 @@ class CleanupService:
     # 1.  Duplicate artwork cleanup (Physical)
     # ------------------------------------------------------------------
     def remove_duplicate_artwork(self, progress_callback=None) -> dict:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         removed = []
-        kept = []
         print(f"[Cleanup] Fast-scanning for duplicate artwork in {self.root}...")
+        
+        # 1. Discovery & Grouping by size
+        size_groups = defaultdict(list)
         for dirpath, _, files in os.walk(self.root):
             images = [f for f in files if Path(f).suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}]
-            if len(images) < 2:
-                continue
-
-            if progress_callback:
-                progress_callback(f"Analyzing images: {os.path.basename(dirpath)}")
-
-            # OPTIMIZATION: Group by size first.
-            # Two files can only be duplicates if they have the EXACT same byte size.
-            size_groups = defaultdict(list)
+            if len(images) < 2: continue
+            
             for img in images:
                 full = os.path.join(dirpath, img)
                 try:
@@ -65,41 +61,50 @@ class CleanupService:
                     size_groups[size].append(full)
                 except: continue
 
-            # Only hash files that share the same size
-            for size, paths in size_groups.items():
-                if len(paths) < 2:
-                    continue
+        # 2. Parallel Hashing
+        to_hash = [p for paths in size_groups.values() if len(paths) >= 2 for p in paths]
+        if not to_hash: return {"removed_duplicates": []}
+
+        path_to_hash = {}
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            future_to_path = {executor.submit(_file_hash, p): p for p in to_hash}
+            for future in as_completed(future_to_path):
+                path = future_to_path[future]
+                try:
+                    h = future.result()
+                    if h: path_to_hash[path] = h
+                except: pass
+
+        # 3. Final Comparison & Removal
+        # Group by hash WITHIN each directory to ensure we only remove dupes in the same movie folder
+        for dirpath, _, files in os.walk(self.root):
+            images = [os.path.join(dirpath, f) for f in files if os.path.join(dirpath, f) in path_to_hash]
+            if len(images) < 2: continue
+
+            hash_groups = defaultdict(list)
+            for img_path in images:
+                h = path_to_hash[img_path]
+                hash_groups[h].append(img_path)
+
+            for h, hashed_paths in hash_groups.items():
+                if len(hashed_paths) < 2: continue
                 
-                # Group by hash within this size group
-                hash_groups = defaultdict(list)
-                for full in paths:
-                    h = _file_hash(full)
-                    if h:
-                        hash_groups[h].append(full)
-
-                for h, hashed_paths in hash_groups.items():
-                    if len(hashed_paths) < 2:
-                        continue
-                    
-                    # Keep the file with the canonical suffix pattern, or shortest name
-                    canonical = min(
-                        hashed_paths,
-                        key=lambda p: (
-                            0 if any(p.endswith(sfx) for sfx in ARTWORK_PATTERNS) else 1,
-                            len(os.path.basename(p))
-                        )
+                canonical = min(
+                    hashed_paths,
+                    key=lambda p: (
+                        0 if any(p.endswith(sfx) for sfx in ARTWORK_PATTERNS) else 1,
+                        len(os.path.basename(p))
                     )
-                    
-                    for dupe in hashed_paths:
-                        if dupe != canonical:
-                            try:
-                                os.remove(dupe)
-                                print(f"[Cleanup] Removed duplicate artwork: {os.path.basename(dupe)}")
-                                removed.append(dupe)
-                            except Exception as e:
-                                print(f"CleanupService: failed to remove {dupe}: {e}")
+                )
+                
+                for dupe in hashed_paths:
+                    if dupe != canonical:
+                        try:
+                            os.remove(dupe)
+                            removed.append(dupe)
+                        except: pass
 
-        return {"removed_duplicates": removed, "kept": kept}
+        return {"removed_duplicates": removed}
 
     # ------------------------------------------------------------------
     # 2.  Empty folder cleanup (Physical)
@@ -107,59 +112,61 @@ class CleanupService:
     def remove_empty_folders(self, progress_callback=None) -> list[str]:
         """
         Removes folders that contain no media files and only metadata.
-        SAFETY: If any file > 20MB exists, or any non-metadata file exists, we KEEP the folder.
+        Uses multi-threading to check folder contents in parallel.
         """
-        # Common metadata/image extensions that are safe to delete if no video is present
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         METADATA_EXTS = {
             '.jpg', '.jpeg', '.png', '.webp', '.nfo', '.txt', '.xml', '.json', 
             '.url', '.tbn', '.info', '.log', '.pjf', '.thumb'
         }
         
         removed_dirs = []
-        print(f"[Cleanup] Safely scanning for orphaned folders in {self.root}...")
+        print(f"[Cleanup] Parallel scanning for orphaned folders in {self.root}...")
 
-        # walk topdown=False so we clean leaf nodes (subfolders) first
-        for dirpath, dirs, files in os.walk(self.root, topdown=False):
-            if dirpath == self.root:
-                continue
-            
-            if progress_callback:
-                progress_callback(f"Checking folder: {os.path.basename(dirpath)}")
+        all_dirs = []
+        for dirpath, dirs, _ in os.walk(self.root, topdown=False):
+            if dirpath != self.root:
+                all_dirs.append(dirpath)
 
-            # SAFETY CHECKS
-            keep_folder = False
-            
-            # 1. If it has subdirectories that we haven't deleted, keep it
-            current_subdirs = [d for d in os.listdir(dirpath) if os.path.isdir(os.path.join(dirpath, d))]
-            if current_subdirs:
-                keep_folder = True
+        def is_safe_to_delete(dirpath):
+            try:
+                # 1. If it has subdirectories, it's not a leaf node (yet)
+                current_contents = os.listdir(dirpath)
+                for item in current_contents:
+                    item_path = os.path.join(dirpath, item)
+                    if os.path.isdir(item_path):
+                        return False # Still has subdirs
+                    
+                    # 2. Check file safety
+                    ext = Path(item).suffix.lower()
+                    if ext not in METADATA_EXTS: return False
+                    if os.path.getsize(item_path) > 20 * 1024 * 1024: return False
                 
-            # 2. Check every file in the folder
-            if not keep_folder:
-                for f in files:
-                    f_path = os.path.join(dirpath, f)
-                    ext = Path(f).suffix.lower()
-                    
-                    # If any file is > 20MB, it's likely a video or important data. KEEP IT.
-                    try:
-                        if os.path.getsize(f_path) > 20 * 1024 * 1024:
-                            keep_folder = True
-                            break
-                    except: pass
-                    
-                    # If any file is NOT a known metadata type, keep the folder to be safe.
-                    if ext not in METADATA_EXTS:
-                        keep_folder = True
-                        break
+                return True
+            except: return False
+
+        # We still need to process them somewhat sequentially because parent folders 
+        # only become empty after child folders are deleted. 
+        # But we can check large batches of leaf nodes in parallel.
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            # We group dirs by depth so we can parallelize each level
+            depth_map = defaultdict(list)
+            for d in all_dirs:
+                depth_map[d.count(os.sep)].append(d)
             
-            if not keep_folder:
-                # This folder ONLY contains small metadata files and no subfolders.
-                try:
-                    print(f"[Cleanup] Safely removing orphaned metadata folder: {dirpath}")
-                    shutil.rmtree(dirpath)
-                    removed_dirs.append(dirpath)
-                except Exception as e:
-                    print(f"[Cleanup] Failed to remove orphaned folder {dirpath}: {e}")
+            # Sort by depth (deepest first)
+            sorted_depths = sorted(depth_map.keys(), reverse=True)
+            
+            for depth in sorted_depths:
+                dirs_at_depth = depth_map[depth]
+                futures = {executor.submit(is_safe_to_delete, d): d for d in dirs_at_depth}
+                for future in as_completed(futures):
+                    d = futures[future]
+                    if future.result():
+                        try:
+                            shutil.rmtree(d)
+                            removed_dirs.append(d)
+                        except: pass
                     
         return removed_dirs
 
@@ -304,16 +311,29 @@ class CleanupService:
     @staticmethod
     def regenerate_nfos(db: Session, library_id: int) -> dict:
         """
-        Regenerates NFO files for all matched movies to ensure they have the latest 
-        metadata structure (like actors/cast).
+        Regenerates NFO files for movies that are missing them on disk.
         """
         from backend.services.nfo import NFOGenerator
         from backend.models.media import Movie
         movies = db.query(Movie).filter(Movie.library_id == library_id, Movie.status == "matched").all()
         nfo_gen = NFOGenerator()
         count = 0
+        errors = 0
+        
+        print(f"[Cleanup] Checking NFO files for {len(movies)} movies...")
+
         for movie in movies:
             if not movie.files: continue
+            
+            file_path = movie.files[0].file_path
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            nfo_path = os.path.join(os.path.dirname(file_path), f"{base_name}.nfo")
+
+            # SKIP if NFO already exists - Cleanup should be conservative
+            if os.path.exists(nfo_path):
+                continue
+            
+            print(f"[Cleanup] Regenerating missing NFO for: {movie.title}")
             
             # Reconstruct metadata dict from DB for NFO gen
             m_dict = {c.name: getattr(movie, c.name) for c in movie.__table__.columns}
@@ -328,11 +348,16 @@ class CleanupService:
             m_dict["audio_channels"] = movie.files[0].audio_channels
 
             try:
-                nfo_gen.generate_movie_nfo(m_dict, movie.files[0].file_path)
-                count += 1
-            except: pass
+                _, success = nfo_gen.generate_movie_nfo(m_dict, file_path)
+                if success:
+                    count += 1
+                else:
+                    errors += 1
+            except Exception as e:
+                print(f"[Cleanup] Critical error generating NFO for {movie.title}: {e}")
+                errors += 1
             
-        return {"regenerated_nfos": count}
+        return {"regenerated_nfos": count, "errors": errors}
 
     # ------------------------------------------------------------------
     # 4.  Rename movie folder + file

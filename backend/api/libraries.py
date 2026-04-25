@@ -20,17 +20,28 @@ router = APIRouter(prefix="/api/libraries", tags=["Libraries"])
 def _get_windows_drive_mounts() -> list[dict]:
     """
     Detect Windows drive letters mounted inside Docker.
-    Convention: D:\ is mounted at /d_drive, E:\ at /e_drive, etc.
+    Checks /mnt/d, /mnt/e (new convention) and /d_drive (legacy convention).
     Returns list of {label, path} dicts for drives that exist.
     """
     drives = []
     for letter in string.ascii_lowercase:
-        mount = f"/{letter}_drive"
-        if os.path.isdir(mount):
+        # Check new /mnt/d convention
+        mnt_path = f"/mnt/{letter}"
+        if os.path.isdir(mnt_path):
             drives.append({
                 "label": f"{letter.upper()}:\\",
-                "path": mount,
+                "path": mnt_path,
             })
+            continue # Don't add duplicate if both exist
+            
+        # Check legacy /d_drive convention
+        legacy_path = f"/{letter}_drive"
+        if os.path.isdir(legacy_path):
+            drives.append({
+                "label": f"{letter.upper()}:\\",
+                "path": legacy_path,
+            })
+            
     # Also always include /media (local mapped folder) and /
     if os.path.isdir("/media"):
         drives.append({"label": "Local /media", "path": "/media"})
@@ -164,30 +175,26 @@ def add_library(lib: LibraryCreate, background_tasks: BackgroundTasks, db: Sessi
 
 def _background_metadata_task(movie_ids: list[int], show_ids: list[int]):
     """
-    Background Enrichment (Identity Phase):
-    Imports NFO data and detects local posters/backdrops.
+    Multi-threaded Identity Import:
+    Reads NFO data and detects local images in parallel.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from backend.core.db import SessionLocal
     from backend.core.task_manager import create_task, update_task
     from backend.services.nfo_reader import NFOReader
     from backend.models.media import Movie, TVShow, Episode, Season
 
-    db = SessionLocal()
     total = len(movie_ids) + len(show_ids)
-    if total == 0:
-        db.close()
-        return
+    if total == 0: return
 
     task_id = create_task(f"Identity Import ({total} items)", total=total)
-    update_task(task_id, status="running", progress=0, message="Starting rapid NFO/Image import...")
+    update_task(task_id, status="running", progress=0, message="Starting parallel NFO/Image import...")
 
-    try:
-        # 1. Process Movies in Batch
-        movies = db.query(Movie).filter(Movie.id.in_(movie_ids)).all()
-        processed = 0
-        for movie in movies:
-            if movie.files:
-                update_task(task_id, message=f"Importing: {movie.title}")
+    def process_movie_nfo(mid):
+        db = SessionLocal()
+        try:
+            movie = db.query(Movie).filter(Movie.id == mid).first()
+            if movie and movie.files:
                 nfo = NFOReader.parse_movie_nfo(movie.files[0].file_path)
                 if nfo:
                     movie.title = nfo.get("title") or movie.title
@@ -197,89 +204,136 @@ def _background_metadata_task(movie_ids: list[int], show_ids: list[int]):
                     movie.fanart_path = nfo.get("fanart_path") or movie.fanart_path
                     movie.cast = nfo.get("cast") or movie.cast
                     movie.runtime = nfo.get("runtime") or movie.runtime
-                    movie.status = "matched"
-            processed += 1
-            if processed % 20 == 0:
-                update_task(task_id, progress=processed)
+                    if nfo.get("tmdb_id"):
+                        movie.tmdb_id = nfo.get("tmdb_id")
+                        movie.status = "matched"
+                    if nfo.get("imdb_id"):
+                        movie.imdb_id = nfo.get("imdb_id")
+                        movie.status = "matched"
+                db.commit()
+            return mid
+        finally:
+            db.close()
 
-        # 2. Process TV Shows in Batch
-        shows = db.query(TVShow).filter(TVShow.id.in_(show_ids)).all()
-        for show in shows:
-            update_task(task_id, message=f"Importing TV: {show.title}")
-            first_ep = db.query(Episode).join(Season).filter(Season.show_id == show.id).first()
-            if first_ep:
-                nfo = NFOReader.parse_tvshow_nfo(first_ep.file_path)
-                if nfo:
-                    show.title = nfo.get("title") or show.title
-                    show.plot = nfo.get("plot") or show.plot
-                    show.year = nfo.get("year") or show.year
-                    show.poster_path = nfo.get("poster_path") or show.poster_path
-                    show.fanart_path = nfo.get("fanart_path") or show.fanart_path
-                    show.cast = nfo.get("cast") or show.cast
-                    show.status = "matched"
-            processed += 1
-            if processed % 20 == 0:
-                update_task(task_id, progress=processed)
+    def process_show_nfo(sid):
+        db = SessionLocal()
+        try:
+            show = db.query(TVShow).filter(TVShow.id == sid).first()
+            if show:
+                first_ep = db.query(Episode).join(Season).filter(Season.show_id == sid).first()
+                if first_ep:
+                    nfo = NFOReader.parse_tvshow_nfo(first_ep.file_path)
+                    if nfo:
+                        show.title = nfo.get("title") or show.title
+                        show.plot = nfo.get("plot") or show.plot
+                        show.year = nfo.get("year") or show.year
+                        show.poster_path = nfo.get("poster_path") or show.poster_path
+                        show.fanart_path = nfo.get("fanart_path") or show.fanart_path
+                        show.cast = nfo.get("cast") or show.cast
+                        if nfo.get("tmdb_id"):
+                            show.tmdb_id = nfo.get("tmdb_id")
+                            show.status = "matched"
+                        if nfo.get("imdb_id"):
+                            show.imdb_id = nfo.get("imdb_id")
+                            show.status = "matched"
+                        show.status = "matched"
+                db.commit()
+            return sid
+        finally:
+            db.close()
 
-        db.commit()
-        # ENSURE FINAL COUNT IS ACCURATE
+    processed = 0
+    try:
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = []
+            for mid in movie_ids: futures.append(executor.submit(process_movie_nfo, mid))
+            for sid in show_ids: futures.append(executor.submit(process_show_nfo, sid))
+
+            for future in as_completed(futures):
+                processed += 1
+                if processed % 20 == 0 or processed == total:
+                    update_task(task_id, progress=processed, message=f"Imported {processed}/{total} items...")
+
         update_task(task_id, status="done", progress=total, message=f"Identity import complete for {total} items.")
     except Exception as e:
-        db.rollback()
         print(f"[IdentityTask] Error: {e}")
         update_task(task_id, status="error", message=str(e))
-    finally:
-        db.close()
 
 def _background_deep_analysis_task(movie_ids: list[int], show_ids: list[int]):
     """
-    Manual Phase 2.2: Deep MediaInfo Extraction (Technical Specs).
-    Only runs when triggered by the user.
+    Multi-threaded Deep MediaInfo Extraction.
+    Handles movies and TV episodes in parallel to speed up large library analysis.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from backend.core.db import SessionLocal
     from backend.core.task_manager import create_task, update_task
     from backend.services.mediainfo import extract_media_info
     from backend.models.media import Movie, TVShow, Episode, Season
 
-    db = SessionLocal()
     total = len(movie_ids) + len(show_ids)
     task_id = create_task(f"Deep Analysis ({total} items)", total=total)
-    update_task(task_id, status="running", progress=0, message="Opening video files...")
+    update_task(task_id, status="running", progress=0, message="Initializing parallel analyzer...")
 
-    processed = 0
-    try:
-        if movie_ids:
-            movies = db.query(Movie).filter(Movie.id.in_(movie_ids)).all()
-            for movie in movies:
-                update_task(task_id, progress=processed, message=f"Analyzing: {movie.title}")
+    def process_movie_worker(movie_id):
+        worker_db = SessionLocal()
+        try:
+            movie = worker_db.query(Movie).filter(Movie.id == movie_id).first()
+            if movie and movie.files:
                 for mfile in movie.files:
                     info = extract_media_info(mfile.file_path)
                     if info:
                         mfile.resolution = info.get("resolution") or "Unknown"
                         mfile.video_codec = info.get("video_codec") or "Unknown"
                         mfile.audio_codec = info.get("audio_codec") or "Unknown"
-                db.commit()
-                processed += 1
+                worker_db.commit()
+            return movie_id
+        finally:
+            worker_db.close()
 
-        if show_ids:
-            shows = db.query(TVShow).filter(TVShow.id.in_(show_ids)).all()
-            for show in shows:
-                update_task(task_id, progress=processed, message=f"Analyzing TV: {show.title}")
-                episodes = db.query(Episode).join(Season).filter(Season.show_id == show.id).all()
-                for ep in episodes:
+    def process_show_worker(show_id):
+        worker_db = SessionLocal()
+        try:
+            episodes = worker_db.query(Episode).join(Season).filter(Season.show_id == show_id).all()
+            for ep in episodes:
+                if ep.file_path:
                     info = extract_media_info(ep.file_path)
                     if info:
                         ep.resolution = info.get("resolution") or "Unknown"
                         ep.video_codec = info.get("video_codec") or "Unknown"
                         ep.audio_codec = info.get("audio_codec") or "Unknown"
-                db.commit()
-                processed += 1
+            worker_db.commit()
+            return show_id
+        finally:
+            worker_db.close()
+
+    processed = 0
+    try:
+        # Use a small thread pool to avoid disk thrashing on HDDs
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = []
+            if movie_ids:
+                for mid in movie_ids:
+                    futures.append(executor.submit(process_movie_worker, mid))
+            if show_ids:
+                for sid in show_ids:
+                    futures.append(executor.submit(process_show_worker, sid))
+
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                    processed += 1
+                    if processed % 5 == 0 or processed == total:
+                        update_task(task_id, progress=processed, message=f"Analyzed {processed}/{total} items...")
+                except Exception as e:
+                    print(f"[DeepAnalysis] Worker error: {e}")
 
         update_task(task_id, status="done", progress=total, message="Deep analysis complete.")
     except Exception as e:
+        print(f"[DeepAnalysis] Task Error: {e}")
         update_task(task_id, status="error", message=str(e))
     finally:
-        db.close()
+        # Note: SessionLocal is handled inside workers
+        pass
 
 def _background_scan(library_id: int):
     from backend.core.db import SessionLocal
@@ -453,36 +507,39 @@ def _background_cleanup(library_id: int):
             from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             report_path = os.path.join(lib.path, f"cleanup_report_{timestamp}.txt")
-            with open(report_path, "w", encoding="utf-8") as f:
-                f.write(f"Cleanup Report for {lib.name} - {datetime.now().isoformat()}\n")
-                f.write("="*60 + "\n\n")
-                
-                f.write(f"SUMMARY:\n")
-                f.write(f"- Fixed Filenames: {fix_stats['fixed_filenames']}\n")
-                f.write(f"- Regenerated NFOs: {nfo_stats['regenerated_nfos']}\n")
-                f.write(f"- Removed Artwork Duplicates: {len(dupes['removed_duplicates'])}\n")
-                f.write(f"- Removed Empty Folders: {len(empty)}\n")
-                f.write(f"- Merged DB Groups: {merge_stats['merged_groups']}\n")
-                f.write(f"- Removed Orphan Records: {orphan_stats['removed_files']}\n\n")
-                
-                if fix_stats.get("details"):
-                    f.write("FIXED FILENAMES:\n")
-                    for d in fix_stats["details"]:
-                        f.write(f"  [FIXED] {d}\n")
-                    f.write("\n")
-                
-                if dupes.get("removed_duplicates"):
-                    f.write("REMOVED DUPLICATE ARTWORK:\n")
-                    for d in dupes["removed_duplicates"]:
-                        f.write(f"  [REMOVED] {d}\n")
-                    f.write("\n")
-                
-                if empty:
-                    f.write("REMOVED EMPTY FOLDERS:\n")
-                    for d in empty:
-                        f.write(f"  [REMOVED] {d}\n")
-                    f.write("\n")
-            print(f"[Cleanup] Report generated: {report_path}")
+            try:
+                with open(report_path, "w", encoding="utf-8") as f:
+                    f.write(f"Cleanup Report for {lib.name} - {datetime.now().isoformat()}\n")
+                    f.write("="*60 + "\n\n")
+                    
+                    f.write(f"SUMMARY:\n")
+                    f.write(f"- Fixed Filenames: {fix_stats['fixed_filenames']}\n")
+                    f.write(f"- Regenerated NFOs: {nfo_stats['regenerated_nfos']}\n")
+                    f.write(f"- Removed Artwork Duplicates: {len(dupes['removed_duplicates'])}\n")
+                    f.write(f"- Removed Empty Folders: {len(empty)}\n")
+                    f.write(f"- Merged DB Groups: {merge_stats['merged_groups']}\n")
+                    f.write(f"- Removed Orphan Records: {orphan_stats['removed_files']}\n\n")
+                    
+                    if fix_stats.get("details"):
+                        f.write("FIXED FILENAMES:\n")
+                        for d in fix_stats["details"]:
+                            f.write(f"  [FIXED] {d}\n")
+                        f.write("\n")
+                    
+                    if dupes.get("removed_duplicates"):
+                        f.write("REMOVED DUPLICATE ARTWORK:\n")
+                        for d in dupes["removed_duplicates"]:
+                            f.write(f"  [REMOVED] {d}\n")
+                        f.write("\n")
+                    
+                    if empty:
+                        f.write("REMOVED EMPTY FOLDERS:\n")
+                        for d in empty:
+                            f.write(f"  [REMOVED] {d}\n")
+                        f.write("\n")
+                print(f"[Cleanup] Report generated: {report_path}")
+            except PermissionError:
+                print(f"[Cleanup] Could not write report to {report_path} - Permission Denied")
         except Exception as report_err:
             print(f"[Cleanup] Failed to generate report: {report_err}")
 

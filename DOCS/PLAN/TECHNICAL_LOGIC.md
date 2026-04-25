@@ -92,15 +92,36 @@ SelfHost Media Orchestrator uses a decentralized configuration model designed fo
 - **Path**: The primary database is stored at `data/orchestrator.db`.
 - **Legacy Migration**: On startup, the system automatically checks for the legacy `mediavault.db` and migrates its content to the new structure if necessary.
 
+### Self-Healing Database Migration (Docker/Windows Compatibility)
+To resolve the "readonly database" error often encountered on Windows host-mounts, the system employs a migration strategy:
+1. **Detection**: On initialization, the `Settings` class checks if `/config/mediavault.db` (legacy host-mount) exists but `/data/orchestrator.db` (internal writable volume) does not.
+2. **Automated Move**: It uses `shutil.copy2` to move the existing database to the `/data` directory, which is backed by a Docker named volume (`db-data`).
+3. **Lock Protection**: The database engine includes retry logic and `PRAGMA` guards to handle filesystem-level locking issues, ensuring the app stays running even on suboptimal storage configurations.
+
 ---
 
 ## 7. CI/CD & Automated Distribution
 
 ### GitHub Actions Workflow
 - **Continuous Integration**: On every pull request to `main`, the build workflow is triggered to ensure the code builds successfully and passes linting.
-- **Continuous Deployment**: On every push to `main`, the workflow builds a production-ready image and pushes it to **Docker Hub** with the `latest` tag.
-- **Optimization**: The workflow uses `docker/setup-buildx-action` and GHA caching (`type=gha`) to speed up subsequent builds by up to 500%.
+- [x] Continuous Deployment: On every push to `main`, the workflow builds a production-ready image and pushes it to **Docker Hub** with the `latest` tag.
+- [x] Optimization: The workflow uses `docker/setup-buildx-action` and GHA caching (`type=gha`) to speed up subsequent builds by up to 500%.
 
 ### Production vs. Development
-- **Production Image**: Optimized for size and security. The `--reload` flag is removed from the FastAPI server to prevent accidental code modifications in production.
-- **User Distribution**: Users are encouraged to pull from Docker Hub, which uses an immutable versioning scheme (e.g., `:latest`), ensuring they always run a verified, stable build.
+- [x] Production Image: Optimized for size and security. The `--reload` flag is removed from the FastAPI server to prevent accidental code modifications in production.
+- [x] User Distribution: Users are encouraged to pull from Docker Hub, which uses an immutable versioning scheme (e.g., `:latest`), ensuring they always run a verified, stable build.
+
+---
+
+## 8. High-Performance Download Mechanism
+To facilitate fast media transfers within local networks, the system implements an optimized HTTP download engine.
+
+### Zero-Copy Transfer
+- **Backend Logic**: The `FileResponse` object in FastAPI is utilized for all media downloads. 
+- **sendfile(2)**: On Linux systems (Docker/Production), this triggers the `sendfile` system call, which performs a **zero-copy transfer**. This means the data is copied directly from the disk cache to the network descriptor by the kernel, bypassing the application-level buffer entirely.
+- **Speed**: This mechanism saturates local Gigabit or Multi-Gigabit network links, providing speeds equivalent to or better than traditional FTP, without the browser compatibility issues of the `ftp://` protocol.
+
+### Frontend Integration
+- **Context-Aware Links**: The UI dynamically generates download URLs based on the media type (Movie vs. Episode).
+- **Native Browser Handling**: By using the `download` attribute on anchor tags, the system triggers the browser's native download manager, allowing for multi-threaded downloads, pausing/resuming, and integration with third-party download accelerators.
+

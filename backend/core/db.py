@@ -13,10 +13,16 @@ engine = create_engine(
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA synchronous=NORMAL")
-    cursor.execute("PRAGMA busy_timeout=15000")
-    cursor.close()
+    try:
+        # Check if WAL is supported. On some network drives or certain Docker volume mounts, 
+        # it might fail with "readonly database" or "locking protocol" error.
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=15000")
+    except Exception as e:
+        print(f"WARNING: Failed to set SQLite pragmas: {e}. Falling back to default journal mode.")
+    finally:
+        cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -49,13 +55,21 @@ _MIGRATIONS = [
 
 def run_migrations():
     # Initial table creations
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"CRITICAL: Failed to initialize database tables: {e}")
+        return
     
     with engine.connect() as conn:
         for stmt in _MIGRATIONS:
             try:
                 conn.execute(text(stmt))
                 conn.commit()
-            except Exception:
-                # Column already exists — safe to ignore
+            except Exception as e:
+                # Column already exists — safe to ignore.
+                # But we log other operational errors (like Read-Only)
+                err_msg = str(e).lower()
+                if "already exists" not in err_msg and "duplicate column name" not in err_msg:
+                    print(f"Migration error for statement '{stmt}': {e}")
                 conn.rollback()

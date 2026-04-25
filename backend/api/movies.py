@@ -162,26 +162,141 @@ def trigger_scrape(movie_id: int, background_tasks: BackgroundTasks, db: Session
 class BulkScrapeRequest(BaseModel):
     movie_ids: list[int]
 
-def _bulk_scrape_task(movie_ids: list[int]):
+async def _bulk_scrape_task(movie_ids: list[int]):
+    """Consolidated parallel scraping with a single progress task."""
     import asyncio
+    from backend.core.task_manager import create_task, update_task
+    from backend.core.db import SessionLocal
     
-    # We create a new event loop for this thread to run async functions sequentially
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    total = len(movie_ids)
+    task_id = create_task(f"Bulk Scrape ({total} movies)", total=total)
+    update_task(task_id, status="running", progress=0, message="Initializing parallel scraper...")
+
+    semaphore = asyncio.Semaphore(5)
+    processed = 0
+
+    async def scrape_wrapper(mid):
+        nonlocal processed
+        async with semaphore:
+            try:
+                # Run the actual scrape logic
+                # We skip creating individual tasks inside this by calling a worker version
+                await _internal_single_scrape(mid)
+            except Exception as e:
+                print(f"[BulkScrape] Failed movie {mid}: {e}")
+            finally:
+                processed += 1
+                if processed % 5 == 0 or processed == total:
+                    update_task(task_id, progress=processed, message=f"Scraped {processed}/{total} movies...")
+
+    tasks = [scrape_wrapper(mid) for mid in movie_ids]
+    await asyncio.gather(*tasks)
+    update_task(task_id, status="done", progress=total, message=f"Successfully processed {total} movies.")
+
+async def _internal_single_scrape(movie_id: int):
+    """Worker version of scrape that doesn't create its own Task Manager entry."""
+    from backend.core.db import SessionLocal
+    from backend.services.scraper.chain import ScraperChain
+    from backend.services.artwork import ArtworkDownloader
+    from backend.services.nfo import NFOGenerator
+
+    db = SessionLocal()
     try:
-        for mid in movie_ids:
-            # Reusing the existing scraper function sequentially
-            loop.run_until_complete(_background_scrape_and_rename(mid))
+        movie = db.query(Movie).filter(Movie.id == movie_id).first()
+        if not movie: return
+        
+        scraper = ScraperChain()
+        metadata = await scraper.scrape_movie(movie.title, movie.year)
+        
+        if metadata:
+            for key, val in metadata.items():
+                if hasattr(movie, key) and val is not None:
+                    setattr(movie, key, val)
+            movie.status = "matched"
+            db.commit()
+
+            # Artwork & NFO (Handle permissions gracefully)
+            if movie.files:
+                try:
+                    file_path = movie.files[0].file_path
+                    artwork_dl = ArtworkDownloader()
+                    await artwork_dl.download_movie_artwork(metadata, file_path)
+                    
+                    nfo_gen = NFOGenerator()
+                    nfo_gen.generate_movie_nfo(metadata, file_path)
+                except PermissionError:
+                    print(f"[Scraper] Permission denied writing files for: {movie.title}")
+                except Exception as e:
+                    print(f"[Scraper] Secondary error for {movie.title}: {e}")
     finally:
-        loop.close()
+        db.close()
 
 @router.post("/scrape/bulk")
-def trigger_bulk_scrape(req: BulkScrapeRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def trigger_bulk_scrape(req: BulkScrapeRequest, background_tasks: BackgroundTasks):
     if not req.movie_ids:
         raise HTTPException(status_code=400, detail="No movie IDs provided")
         
     background_tasks.add_task(_bulk_scrape_task, req.movie_ids)
-    return {"status": f"Queued {len(req.movie_ids)} movies for scraping"}
+    return {"status": f"Queued {len(req.movie_ids)} movies for parallel scraping"}
+
+def _bulk_rename_task(movie_ids: list[int]):
+    """Multi-threaded renaming using ThreadPoolExecutor."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from backend.core.db import SessionLocal
+    from backend.core.task_manager import create_task, update_task
+    
+    total = len(movie_ids)
+    task_id = create_task(f"Bulk Rename ({total} items)", total=total)
+    update_task(task_id, status="running", progress=0, message="Initializing renaming engine...")
+
+    def rename_worker(mid):
+        worker_db = SessionLocal()
+        try:
+            movie = worker_db.query(Movie).filter(Movie.id == mid).first()
+            if not movie or not movie.files or movie.status != "matched":
+                return False
+            
+            lib = worker_db.query(Library).filter(Library.id == movie.library_id).first()
+            if not lib: return False
+
+            current_path = movie.files[0].file_path
+            if not current_path or not os.path.exists(current_path): return False
+
+            new_path = CleanupService.rename_to_title(
+                current_file_path=current_path,
+                title=movie.title,
+                year=movie.year,
+                library_root=lib.path,
+                resolution=movie.files[0].resolution or "",
+                video_codec=movie.files[0].video_codec or "",
+                audio_codec=movie.files[0].audio_codec or "",
+            )
+            movie.files[0].file_path = new_path
+            movie.file_renamed = True
+            worker_db.commit()
+            return True
+        except Exception as e:
+            print(f"[BulkRename] Error renaming movie {mid}: {e}")
+            return False
+        finally:
+            worker_db.close()
+
+    processed = 0
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(rename_worker, mid) for mid in movie_ids]
+        for future in as_completed(futures):
+            processed += 1
+            if processed % 5 == 0 or processed == total:
+                update_task(task_id, progress=processed, message=f"Renamed {processed}/{total} items...")
+
+    update_task(task_id, status="done", progress=total, message="Bulk renaming complete.")
+
+@router.post("/rename/bulk")
+def trigger_bulk_rename(req: BulkScrapeRequest, background_tasks: BackgroundTasks):
+    if not req.movie_ids:
+        raise HTTPException(status_code=400, detail="No IDs provided")
+    background_tasks.add_task(_bulk_rename_task, req.movie_ids)
+    return {"status": "Bulk rename queued", "items": len(req.movie_ids)}
 
 @router.post("/{movie_id}/rename")
 def rename_movie_to_title(movie_id: int, db: Session = Depends(get_db)):
